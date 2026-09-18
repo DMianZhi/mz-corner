@@ -9,6 +9,35 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
+/** CLI 响应通用结构（kdocs-comate-cli 返回 { detail, result }，部分版本包一层 data） */
+interface CliResponse<T = Record<string, unknown>> {
+  code?: number;
+  data?: {
+    result?: unknown;
+    detail?: T;
+  };
+  detail?: T;
+  result?: unknown;
+}
+
+/** 从 CLI 响应中提取 detail（兼容有无 data 包裹两种结构） */
+function cliDetail<T>(res: CliResponse<T> | undefined): T | undefined {
+  if (!res) return undefined;
+  return res.detail ?? res.data?.detail;
+}
+
+/** 多维表记录行 */
+interface SheetRecord<F = Record<string, unknown>> {
+  id: string;
+  fields: F;
+}
+
+/** 记录列表响应的 detail 结构 */
+interface RecordsDetail {
+  records?: SheetRecord[];
+  hasMore?: boolean;
+}
+
 export const CLI = "/usr/local/bin/kdocs-comate-cli";
 export const BLOG_DB_FILE_ID = "<dbsheet-file-id>";
 export const ARTICLES_SHEET_ID = 2;
@@ -82,7 +111,7 @@ export async function listProjectsFromDb(): Promise<Project[]> {
     sheet_id: PROJECTS_SHEET_ID,
     max_records: 50,
   });
-  const records = result?.data?.detail?.records || [];
+  const records = cliDetail<RecordsDetail>(result)?.records || [];
   return records
     .map(parseProject)
     .filter((p: Project) => p.name)
@@ -127,11 +156,17 @@ export function parseComment(record: { id: string; fields: unknown }): BlogComme
   };
 }
 
-export async function runCli(service: string, action: string, params: unknown): Promise<any> {
+/** 从 unknown 错误中安全提取 message（catch 块专用） */
+export function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
+export async function runCli(service: string, action: string, params: unknown): Promise<CliResponse> {
   // 通过登录 shell 调用，确保拿到与终端一致的凭证环境（keychain / WPS_SID）
   const cmd = `kdocs-comate-cli ${service} ${action} '${String(JSON.stringify(params)).replace(/'/g, "'\\''")}'`;
   const { stdout } = await execFileAsync("/bin/sh", ["-lc", cmd], { timeout: 30_000 });
-  return JSON.parse(stdout);
+  return JSON.parse(stdout) as CliResponse;
 }
 
 export async function listArticlesFromDb(): Promise<BlogArticle[]> {
@@ -141,7 +176,7 @@ export async function listArticlesFromDb(): Promise<BlogArticle[]> {
     max_records: 100,
   });
   // CLI 返回结构: { code, data: { result, detail: { records } } }
-  const records = result?.data?.detail?.records || [];
+  const records = cliDetail<RecordsDetail>(result)?.records || [];
   return records
     .map(parseArticle)
     .filter((a: BlogArticle) => a.status === "已发布" && a.title);
@@ -159,7 +194,7 @@ export async function listCommentsFromDb(articleId?: string): Promise<BlogCommen
     max_records: 200,
   });
   // CLI 返回结构: { code, data: { result, detail: { records } } }
-  const records = result?.data?.detail?.records || [];
+  const records = cliDetail<RecordsDetail>(result)?.records || [];
   const comments = records.map(parseComment);
   return articleId ? comments.filter((c: BlogComment) => c.articleId === articleId) : comments;
 }
@@ -225,6 +260,6 @@ export async function addCommentToDb(input: {
     ],
   });
 
-  const record = result?.data?.detail?.records?.[0];
+  const record = cliDetail<RecordsDetail>(result)?.records?.[0];
   return record ? parseComment(record) : null;
 }
