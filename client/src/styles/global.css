@@ -211,7 +211,7 @@ body {
 
 .watermark {
   position: absolute;
-  font-size: clamp(120px, 18vw, 320px);
+  font-size: clamp(120px, 12vw, 320px);
   font-weight: 800;
   line-height: 1;
   color: transparent;

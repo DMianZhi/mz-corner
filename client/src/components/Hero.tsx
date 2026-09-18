@@ -42,7 +42,7 @@ export default function Hero() {
       style={{ minHeight: '100svh', padding: '0 var(--gutter)' }}
     >
       {/* 水印字：FULL-STACK 横排 + MZ 竖排错位叠加 */}
-      <div className="watermark hidden md:block" data-depth="0.015" style={{ right: '-2vw', bottom: '6vh' }}>
+      <div className="watermark hidden md:block" data-depth="0.015" style={{ right: 0, bottom: '6vh' }}>
         FULL-STACK
       </div>
       {/* 右侧错位 MZ 水印：完全复用 .watermark 材质，坐在大字基线上 */}
