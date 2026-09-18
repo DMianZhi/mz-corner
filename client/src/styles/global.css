@@ -358,3 +358,29 @@ html.light .watermark {
 @media (min-width: 1024px) {
   .lg\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+
+/* ── 项目卡高光追踪：注册可过渡的自定义属性（Chromium 85+）── */
+@property --mx {
+  syntax: '<percentage>';
+  inherits: true;
+  initial-value: 50%;
+}
+@property --my {
+  syntax: '<percentage>';
+  inherits: true;
+  initial-value: 50%;
+}
+.project-card {
+  transition: --mx 420ms cubic-bezier(0.22, 1, 0.36, 1),
+              --my 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.project-card .spotlight {
+  transition: opacity 300ms ease;
+  opacity: 0;
+}
+.project-card:hover .spotlight {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .project-card .spotlight { transition: opacity 300ms ease; }
+}
