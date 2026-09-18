@@ -25,22 +25,30 @@ function ProjectCard({ p, index }: { p: Project; index: number }) {
     if (!fine || !wide || reduced) return;
 
     let raf = 0;
+    let lastX = 0, lastY = 0;
     const onMove = (e: MouseEvent) => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
         const r = card.getBoundingClientRect();
         const relX = (e.clientX - r.left) / r.width;
         const relY = (e.clientY - r.top) / r.height;
-        card.style.transition = 'transform 100ms linear';
+        // 旋转跟随（快响应）+ 高光追赶（自适应时长）
+        const dist = Math.hypot(e.clientX - lastX, e.clientY - lastY);
+        const dur = Math.round(Math.min(420, Math.max(120, dist * 3)));
+        card.style.transition = `transform 100ms linear, --mx ${dur}ms cubic-bezier(0.22,1,0.36,1), --my ${dur}ms cubic-bezier(0.22,1,0.36,1)`;
         card.style.transform = `perspective(1200px) rotateY(${(relX - 0.5) * 10}deg) rotateX(${-(relY - 0.5) * 10}deg) scale(1.015)`;
+        lastX = e.clientX; lastY = e.clientY;
         card.style.setProperty('--mx', `${relX * 100}%`);
         card.style.setProperty('--my', `${relY * 100}%`);
       });
     };
     const onLeave = () => {
       cancelAnimationFrame(raf);
-      card.style.transition = 'transform 500ms cubic-bezier(0.16,1,0.3,1)';
+      card.style.transition = 'transform 500ms cubic-bezier(0.16,1,0.3,1), --mx 500ms cubic-bezier(0.16,1,0.3,1), --my 500ms cubic-bezier(0.16,1,0.3,1)';
       card.style.transform = 'perspective(1200px) rotateY(0) rotateX(0) scale(1)';
+      // 高光归位中心，下次划入从中心平滑追向鼠标，不再闪现
+      card.style.setProperty('--mx', '50%');
+      card.style.setProperty('--my', '50%');
     };
     card.addEventListener('mousemove', onMove);
     card.addEventListener('mouseleave', onLeave);
@@ -77,11 +85,11 @@ function ProjectCard({ p, index }: { p: Project; index: number }) {
         (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-soft)';
       }}
     >
-      {/* 高光层 */}
+      {/* 高光层：标志色追踪光斑，位置由 @property 过渡平滑追赶鼠标 */}
       <div
-        className="pointer-events-none absolute inset-0 hidden lg:block"
+        className="spotlight pointer-events-none absolute inset-0 hidden lg:block"
         style={{
-          background: 'radial-gradient(600px circle at var(--mx,50%) var(--my,50%), rgba(255,255,255,0.08), transparent 40%)',
+          background: `radial-gradient(560px circle at var(--mx,50%) var(--my,50%), rgba(${rgb},0.16), transparent 42%)`,
         }}
       />
 
