@@ -226,6 +226,11 @@ export default function ProjectGallery({ projects }: { projects: Project[] }) {
       const r = (host ?? spot).getBoundingClientRect();
       spot.style.setProperty('--sx', `${clientX - r.left}px`);
       spot.style.setProperty('--sy', `${clientY - r.top}px`);
+      // 边界自适应收缩：光斑半径随鼠标到容器边界的最近距离收缩，
+      // 渐变在到达边界前自然衰减到 0，不产生硬切割线
+      const distEdge = Math.min(clientX - r.left, r.right - clientX, clientY - r.top, r.bottom - clientY);
+      const radius = Math.round(Math.min(520, Math.max(0, distEdge * 1.6)));
+      spot.style.setProperty('--sr', `${radius}px`);
       // 滚动时卡片横移，鼠标下方可能换了卡：用命中检测刷新标志色
       const el = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
       const card = el ? el.closest('.project-card') : null;
@@ -371,7 +376,7 @@ export default function ProjectGallery({ projects }: { projects: Project[] }) {
           ref={spotRef}
           className="gallery-spotlight pointer-events-none"
           style={{
-            background: 'radial-gradient(520px circle at var(--sx,-999px) var(--sy,-999px), rgba(var(--spot-rgb,200,245,66),0.20), transparent 42%)',
+            background: 'radial-gradient(circle var(--sr,520px) at var(--sx,-999px) var(--sy,-999px), rgba(var(--spot-rgb,200,245,66),0.20), transparent 42%)',
           }}
         />
         {header}
