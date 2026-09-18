@@ -220,8 +220,10 @@ export default function ProjectGallery({ projects }: { projects: Project[] }) {
     let lastX = -1, lastY = -1;
 
     const applySpot = (clientX: number, clientY: number) => {
-      // 光斑 absolute 在 sticky 容器内：把鼠标视口坐标换算为容器内坐标
-      const r = section.getBoundingClientRect();
+      // 光斑 absolute 在 sticky 容器内：以光斑的 offsetParent（sticky 容器）为基准换算，
+      // sticky 生效时容器钉在视口，释放时容器随页面上移，基准始终正确
+      const host = spot.offsetParent as HTMLElement | null;
+      const r = (host ?? spot).getBoundingClientRect();
       spot.style.setProperty('--sx', `${clientX - r.left}px`);
       spot.style.setProperty('--sy', `${clientY - r.top}px`);
     };
