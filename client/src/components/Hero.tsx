@@ -1,14 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
-import { getProjects, type Project } from '@/services/blog-api';
+import { useEffect, useRef } from 'react';
 
-/** Hero 鼠标视差（桌面端 + 非 reduced-motion）+ 右侧项目色标阵列 */
+/** Hero 鼠标视差（桌面端 + 非 reduced-motion） */
 export default function Hero() {
   const ref = useRef<HTMLElement>(null);
-  const [projects, setProjects] = useState<Project[]>([]);
-
-  useEffect(() => {
-    getProjects().then((ps) => setProjects(ps.slice(0, 4))).catch(() => {});
-  }, []);
 
   useEffect(() => {
     const el = ref.current;
@@ -51,41 +45,48 @@ export default function Hero() {
       <div className="watermark hidden md:block" data-depth="0.015" style={{ right: '-2vw', bottom: '6vh' }}>
         FULL-STACK
       </div>
-      {/* 右侧项目色标阵列：镜像大字错位结构，预告长廊内容 */}
+      {/* 右侧错位 MZ 水印：镜像大字错位结构，与「敏智」色标方块对角呼应 */}
       <div
         className="hidden lg:block"
         aria-hidden="true"
-        style={{ position: 'absolute', left: 'clamp(560px, 56vw, 900px)', top: '50%', transform: 'translateY(-50%)' }}
+        style={{ position: 'absolute', left: 'clamp(560px, 54vw, 860px)', top: '50%', transform: 'translateY(-50%)' }}
       >
-        <div data-depth="0.03" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          {projects.map((p, i) => (
-            <div
-              key={p.id}
-              className="hero-chip"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                marginLeft: i % 2 === 1 ? 44 : 0,
-                opacity: 0,
-                animation: `hero-chip-in 600ms ease ${200 + i * 120}ms forwards`,
-              }}
-            >
-              <span
-                style={{
-                  width: 22, height: 22, borderRadius: 5, flexShrink: 0,
-                  background: p.color,
-                  boxShadow: `0 0 18px ${p.color}55`,
-                }}
-              />
-              <span
-                className="font-mono-site"
-                style={{ fontSize: 11, letterSpacing: '0.16em', color: 'var(--text-3)' }}
-              >
-                {p.name}
-              </span>
-            </div>
-          ))}
+        <div data-depth="0.03" style={{ position: 'relative', lineHeight: 0.86 }}>
+          {/* M：超大空心描边 */}
+          <div
+            className="watermark"
+            style={{
+              fontSize: 'clamp(150px, 15vw, 230px)',
+              fontWeight: 800,
+              letterSpacing: '-0.02em',
+              WebkitTextStroke: '1.5px rgba(255,255,255,0.14)',
+            }}
+          >
+            M
+          </div>
+          {/* Z：错开右缩 + 实心极淡填充 */}
+          <div
+            style={{
+              fontSize: 'clamp(90px, 9vw, 140px)',
+              fontWeight: 800,
+              letterSpacing: '-0.02em',
+              color: 'rgba(200,245,66,0.10)',
+              marginLeft: 'clamp(60px, 6vw, 96px)',
+              marginTop: '-0.06em',
+            }}
+          >
+            Z
+          </div>
+          {/* 对角色标方块：与「敏智」左上角方块呼应 */}
+          <span
+            data-depth="0.05"
+            style={{
+              position: 'absolute',
+              right: -34, top: -26,
+              width: 16, height: 16, borderRadius: 4,
+              background: 'var(--brand)',
+            }}
+          />
         </div>
       </div>
 
