@@ -1,3 +1,4 @@
+import { errorMessage } from "~~/utils/blog-db";
 /**
  * GET  /api/blog/posts/:id/comments  — 某篇文章的评论列表
  * POST /api/blog/posts/:id/comments  — 新增评论（写入多维表评论表）
@@ -17,8 +18,8 @@ export default defineEventHandler(async (event) => {
         return ta - tb;
       });
       return { code: 0, data: comments };
-    } catch (error: any) {
-      throw createError({ statusCode: 502, statusMessage: `获取评论失败: ${error?.message}` });
+    } catch (error: unknown) {
+      throw createError({ statusCode: 502, statusMessage: `获取评论失败: ${errorMessage(error)}` });
     }
   }
 
@@ -33,9 +34,9 @@ export default defineEventHandler(async (event) => {
       }
       const comment = await addCommentToDb({ articleId: id, author, email, content });
       return { code: 0, data: comment };
-    } catch (error: any) {
-      if (error?.statusCode === 400) throw error;
-      throw createError({ statusCode: 502, statusMessage: `添加评论失败: ${error?.message}` });
+    } catch (error: unknown) {
+      if (error instanceof Error && "statusCode" in error && (error as { statusCode: number }).statusCode === 400) throw error;
+      throw createError({ statusCode: 502, statusMessage: `添加评论失败: ${errorMessage(error)}` });
     }
   }
 

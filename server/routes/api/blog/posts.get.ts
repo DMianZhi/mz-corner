@@ -1,3 +1,4 @@
+import { errorMessage } from "~~/utils/blog-db";
 import {
   defineEventHandler,
   getQuery,
@@ -49,8 +50,8 @@ export default defineEventHandler(async (event) => {
         totalPages: 1,
       },
     };
-  } catch (error: any) {
-    console.error("[blog] posts error:", error?.message || error);
-    throw createError({ statusCode: 500, statusMessage: error?.message || "获取文章失败" });
+  } catch (error: unknown) {
+    console.error("[blog] posts error:", errorMessage(error));
+    throw createError({ statusCode: 500, statusMessage: errorMessage(error) || "获取文章失败" });
   }
 });

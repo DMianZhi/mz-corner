@@ -215,9 +215,13 @@ function collectBody(req: IncomingMessage): Promise<string> {
 
 export function gatewayProxy(): Plugin {
   let encPromise: Promise<ResolvedEncryption | null> | null = null;
+  let logger: { info: (msg: string) => void } = { info: () => {} };
 
   return {
     name: "gateway-encrypted-proxy",
+    configResolved(config) {
+      logger = config.logger;
+    },
     apply: "serve",
 
     config(_: unknown, { mode }: ConfigEnv) {
@@ -238,7 +242,7 @@ export function gatewayProxy(): Plugin {
         .then((config) => {
           const mode = config.entry_json_config?.encryption_mode;
           if (mode !== "1" && mode !== "2") {
-            console.log(`[gateway-proxy] encryption_mode="${mode}", encryption disabled`);
+            logger.info(`[gateway-proxy] encryption_mode="${mode}", encryption disabled`);
             return null;
           }
           const pk = config.encryption?.public_key;
@@ -247,7 +251,7 @@ export function gatewayProxy(): Plugin {
             console.warn("[gateway-proxy] encryption config incomplete, disabled");
             return null;
           }
-          console.log(`[gateway-proxy] encryption enabled (mode=${mode}), target=${appBaseUrl}`);
+          logger.info(`[gateway-proxy] encryption enabled (mode=${mode}), target=${appBaseUrl}`);
           return { appBaseUrl, publicKeyB64: pk, algorithm: algo, wpsSid, gatewayOrigin };
         })
         .catch((err) => {

@@ -1,3 +1,4 @@
+import { errorMessage } from "~~/utils/blog-db";
 import { defineEventHandler, readBody, createError } from "h3";
 
 /**
@@ -28,9 +29,9 @@ export default defineEventHandler(async (event) => {
     });
     if (!comment) throw createError({ statusCode: 500, statusMessage: "评论写入失败" });
     return { code: 0, data: comment };
-  } catch (error: any) {
-    if (error?.statusCode) throw error;
-    console.error("[blog] add comment error:", error?.message || error);
-    throw createError({ statusCode: 500, statusMessage: error?.message || "评论失败" });
+  } catch (error: unknown) {
+    if (error instanceof Error && "statusCode" in error) throw error;
+    console.error("[blog] add comment error:", errorMessage(error));
+    throw createError({ statusCode: 500, statusMessage: errorMessage(error) || "评论失败" });
   }
 });

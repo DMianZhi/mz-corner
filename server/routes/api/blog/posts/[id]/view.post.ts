@@ -1,3 +1,4 @@
+import { errorMessage } from "~~/utils/blog-db";
 import {
   defineEventHandler,
   getRouterParam,
@@ -21,8 +22,8 @@ export default defineEventHandler(async (event) => {
     if (!viewCount) return { code: 1, data: { viewCount: null } };
     await addViewToDb(id, viewCount);
     return { code: 0, data: { viewCount } };
-  } catch (error: any) {
-    console.error("[blog] increment views error:", error?.message || error);
+  } catch (error: unknown) {
+    console.error("[blog] increment views error:", errorMessage(error));
     return { code: 1, data: { viewCount: null } };
   }
 });
