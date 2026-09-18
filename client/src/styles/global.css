@@ -359,6 +359,23 @@ html.light .watermark {
   .lg\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
+/* ── Hero 项目色标阵列：镜像大字错位，预告长廊 ── */
+@keyframes hero-chip-in {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.hero-chip {
+  transition: transform 250ms ease, opacity 250ms ease;
+}
+.hero-chip:hover {
+  transform: translateX(-6px);
+}
+.hero-chip:hover span:last-child {
+  color: var(--text-1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .hero-chip { animation: none !important; opacity: 1 !important; }
+}
 /* ── 长廊全局光斑：absolute 在 sticky 视口容器内，跨卡连续 ── */
 .gallery-spotlight {
   position: absolute;
