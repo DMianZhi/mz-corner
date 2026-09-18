@@ -75,3 +75,17 @@ export interface Project {
   order: number;
   status: 'live' | 'wip' | 'archived' | string;
 }
+
+/** 站点配置（多维表「站点配置」表驱动） */
+export interface SiteConfig {
+  name: string;
+  nameEn: string;
+  role: string;
+  location: string;
+  email: string;
+  bio: string;
+  skills: string[];
+  github: string;
+  twitter: string;
+  footerNote: string;
+}

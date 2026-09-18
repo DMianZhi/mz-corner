@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useSiteConfig } from '@/components/SiteConfigContext';
 
 /** 磁吸邮箱（仅首页）*/
 function MagneticMail() {
@@ -74,20 +75,23 @@ function MagneticMail() {
     };
   }, []);
 
+  const config = useSiteConfig();
+
   return (
     <a
       ref={mailRef}
-      href="mailto:minzhi@example.com"
+      href={`mailto:${config.email}`}
       className="mail-magnetic mt-8 inline-block no-underline"
       style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-1)' }}
     >
-      minzhi@example.com
+      {config.email}
     </a>
   );
 }
 
 /** 简洁页脚版权条（通用）*/
 export function MiniFooter() {
+  const config = useSiteConfig();
   return (
     <footer className="mx-auto" style={{ maxWidth: 'var(--content-w)', padding: 'clamp(96px,14vh,160px) var(--gutter) 0' }}>
       <div
@@ -100,8 +104,8 @@ export function MiniFooter() {
           color: 'var(--text-3)',
         }}
       >
-        <span>© 2026 敏智</span>
-        <span className="hidden sm:inline">DESIGNED &amp; BUILT BY MIN ZHI</span>
+        <span>© 2026 {config.name}</span>
+        <span className="hidden sm:inline">{config.footerNote}</span>
         <button
           onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           className="font-mono-site"
@@ -116,6 +120,12 @@ export function MiniFooter() {
 
 /** 完整页脚（仅首页）：磁吸邮箱 + 社交 + 版权条 */
 export default function Footer() {
+  const config = useSiteConfig();
+  const socials: { label: string; href: string }[] = [
+    ...(config.github ? [{ label: 'GitHub', href: config.github }] : []),
+    { label: '博客', href: '#/articles' },
+    ...(config.twitter ? [{ label: 'Twitter', href: config.twitter }] : []),
+  ];
   return (
     <footer style={{ padding: 'clamp(96px,14vh,160px) var(--gutter) 0' }}>
       <h2 className="m-0" style={{ fontSize: 'clamp(48px, 9vw, 120px)', fontWeight: 800, lineHeight: 1, letterSpacing: '-0.02em', color: 'var(--text-1)' }}>
@@ -123,14 +133,16 @@ export default function Footer() {
       </h2>
       <MagneticMail />
       <div className="mt-8 flex gap-6">
-        {['GitHub', '博客', 'Twitter'].map((s) => (
+        {socials.map((s) => (
           <a
-            key={s}
-            href="#/"
+            key={s.label}
+            href={s.href}
+            target={s.href.startsWith('http') ? '_blank' : undefined}
+            rel="noreferrer"
             className="link-underline font-mono-site no-underline"
             style={{ fontSize: 13, letterSpacing: '0.1em', color: 'var(--text-2)' }}
           >
-            {s}
+            {s.label}
           </a>
         ))}
       </div>
@@ -144,8 +156,8 @@ export default function Footer() {
           color: 'var(--text-3)',
         }}
       >
-        <span>© 2026 敏智</span>
-        <span className="hidden sm:inline">DESIGNED &amp; BUILT BY MIN ZHI</span>
+        <span>© 2026 {config.name}</span>
+        <span className="hidden sm:inline">{config.footerNote}</span>
         <button
           onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
           className="font-mono-site"

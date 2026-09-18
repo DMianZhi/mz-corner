@@ -263,3 +263,59 @@ export async function addCommentToDb(input: {
   const record = cliDetail<RecordsDetail>(result)?.records?.[0];
   return record ? parseComment(record) : null;
 }
+
+/** 站点配置（key-value） */
+export interface SiteConfig {
+  name: string;
+  nameEn: string;
+  role: string;
+  location: string;
+  email: string;
+  bio: string;
+  skills: string[];
+  github: string;
+  twitter: string;
+  footerNote: string;
+}
+
+const DEFAULT_CONFIG: SiteConfig = {
+  name: '敏智',
+  nameEn: 'MIN ZHI',
+  role: 'FULL-STACK DEVELOPER',
+  location: '31.23°N, 121.47°E — SHANGHAI',
+  email: 'minzhi@example.com',
+  bio: '我是敏智，一名全栈开发者。喜欢把想法变成能跑的产品，关注前端体验与工程效率。这个网站既是我的项目陈列室，也是我写字的地方。',
+  skills: ['React', 'TypeScript', 'Node.js', 'Nitro', 'Tailwind', 'Go'],
+  github: '',
+  twitter: '',
+  footerNote: 'DESIGNED & BUILT BY MIN ZHI',
+};
+
+/** 读取站点配置（多维表 sheet 5，key-value 结构；缺项回退默认值） */
+export async function getSiteConfig(): Promise<SiteConfig> {
+  const result = await runCli('dbsheet', 'list-records', {
+    file_id: BLOG_DB_FILE_ID,
+    sheet_id: 5,
+    max_records: 100,
+  });
+  const records = cliDetail<RecordsDetail>(result)?.records || [];
+  const kv = new Map<string, string>();
+  for (const r of records) {
+    const key = String(r.fields['键'] ?? '').trim();
+    const val = String(r.fields['值'] ?? '').trim();
+    if (key) kv.set(key, val);
+  }
+  const skills = (kv.get('skills') || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+  return {
+    name: kv.get('name') || DEFAULT_CONFIG.name,
+    nameEn: kv.get('name_en') || DEFAULT_CONFIG.nameEn,
+    role: kv.get('role') || DEFAULT_CONFIG.role,
+    location: kv.get('location') || DEFAULT_CONFIG.location,
+    email: kv.get('email') || DEFAULT_CONFIG.email,
+    bio: kv.get('bio') || DEFAULT_CONFIG.bio,
+    skills: skills.length ? skills : DEFAULT_CONFIG.skills,
+    github: kv.get('github') || '',
+    twitter: kv.get('twitter') || '',
+    footerNote: kv.get('footer_note') || DEFAULT_CONFIG.footerNote,
+  };
+}
