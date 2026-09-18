@@ -339,18 +339,18 @@ export default function ProjectGallery({ projects }: { projects: Project[] }) {
 
   return (
     <section ref={sectionRef} className="relative" style={{ height: sectionH || '300vh' }}>
-      {/* 全局光斑：fixed 钉在鼠标视口坐标，跨卡连续，颜色随 hover 卡片切换 */}
-      <div
-        ref={spotRef}
-        className="gallery-spotlight pointer-events-none"
-        style={{
-          background: 'radial-gradient(520px circle at var(--sx,-999px) var(--sy,-999px), rgba(var(--spot-rgb,200,245,66),0.14), transparent 42%)',
-        }}
-      />
       <div
         className="sticky top-0 flex flex-col justify-center overflow-hidden"
         style={{ height: '100svh' }}
       >
+        {/* 全局光斑：absolute 在 sticky 视口容器内，跟随视口不受祖先 transform 影响，跨卡连续 */}
+        <div
+          ref={spotRef}
+          className="gallery-spotlight pointer-events-none"
+          style={{
+            background: 'radial-gradient(520px circle at var(--sx,-999px) var(--sy,-999px), rgba(var(--spot-rgb,200,245,66),0.20), transparent 42%)',
+          }}
+        />
         {header}
         <div
           ref={trackRef}
