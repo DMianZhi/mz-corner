@@ -217,11 +217,20 @@ export default function ProjectGallery({ projects }: { projects: Project[] }) {
 
     let raf = 0;
     let active = false;
+    let lastX = -1, lastY = -1;
+
+    const applySpot = (clientX: number, clientY: number) => {
+      // 光斑 absolute 在 sticky 容器内：把鼠标视口坐标换算为容器内坐标
+      const r = section.getBoundingClientRect();
+      spot.style.setProperty('--sx', `${clientX - r.left}px`);
+      spot.style.setProperty('--sy', `${clientY - r.top}px`);
+    };
+
     const onMove = (e: MouseEvent) => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
-        spot.style.setProperty('--sx', `${e.clientX}px`);
-        spot.style.setProperty('--sy', `${e.clientY}px`);
+        lastX = e.clientX; lastY = e.clientY;
+        applySpot(lastX, lastY);
         if (!active) { active = true; spot.style.opacity = '1'; }
         // 命中哪张卡就切到它的标志色
         const card = (e.target as HTMLElement).closest('.project-card');
@@ -229,17 +238,28 @@ export default function ProjectGallery({ projects }: { projects: Project[] }) {
         if (rgb) spot.style.setProperty('--spot-rgb', rgb);
       });
     };
+
+    // sticky 释放/驻留段滚动时容器会移动：用缓存鼠标坐标重锚光斑到容器内坐标
+    const onScroll = () => {
+      if (lastX < 0) return;
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => applySpot(lastX, lastY));
+    };
+
     const onLeave = () => {
       cancelAnimationFrame(raf);
       active = false;
+      lastX = -1; lastY = -1;
       spot.style.opacity = '0';
     };
     section.addEventListener('mousemove', onMove);
     section.addEventListener('mouseleave', onLeave);
+    window.addEventListener('scroll', onScroll, { passive: true });
     return () => {
       cancelAnimationFrame(raf);
       section.removeEventListener('mousemove', onMove);
       section.removeEventListener('mouseleave', onLeave);
+      window.removeEventListener('scroll', onScroll);
     };
   }, [isDesktop]);
 
