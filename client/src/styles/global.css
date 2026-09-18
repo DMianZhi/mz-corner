@@ -368,6 +368,10 @@ html.light .watermark {
   transition: opacity 350ms ease, background 300ms ease;
   mix-blend-mode: screen;
 }
+/* 亮色模式：screen 提亮在白底上不可见，改用 multiply 叠色呈现彩色晕染 */
+html:not(.dark) .gallery-spotlight {
+  mix-blend-mode: multiply;
+}
 @media (prefers-reduced-motion: reduce) {
   .gallery-spotlight { display: none; }
 }
