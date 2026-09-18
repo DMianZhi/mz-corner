@@ -369,7 +369,7 @@ html.light .watermark {
   mix-blend-mode: screen;
 }
 /* 亮色模式：screen 提亮在白底上不可见，改用 multiply 叠色呈现彩色晕染 */
-html:not(.dark) .gallery-spotlight {
+html.light .gallery-spotlight {
   mix-blend-mode: multiply;
 }
 @media (prefers-reduced-motion: reduce) {

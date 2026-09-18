@@ -56,17 +56,17 @@ export default function Hero() {
         }}
       >
         <div data-depth="0.03" style={{ position: 'relative' }}>
-          {/* M：原生 watermark 材质，仅缩小字号；作为 Z 的锚定基准 */}
-          <div className="watermark" style={{ fontSize: 'clamp(120px, 12vw, 190px)', position: 'relative' }}>
+          {/* M：原生 watermark 材质，仅缩小字号 */}
+          <div className="watermark" style={{ fontSize: 'clamp(120px, 12vw, 190px)' }}>
             M
           </div>
-          {/* Z：同材质，右下错开 */}
+          {/* Z：同材质，右下错开（恢复原定位） */}
           <div
             className="watermark"
             style={{
               fontSize: 'clamp(70px, 7vw, 110px)',
               right: 'clamp(-70px, -5vw, -40px)',
-              bottom: '-0.1em',
+              bottom: '-0.12em',
             }}
           >
             Z
