@@ -226,6 +226,11 @@ export default function ProjectGallery({ projects }: { projects: Project[] }) {
       const r = (host ?? spot).getBoundingClientRect();
       spot.style.setProperty('--sx', `${clientX - r.left}px`);
       spot.style.setProperty('--sy', `${clientY - r.top}px`);
+      // 滚动时卡片横移，鼠标下方可能换了卡：用命中检测刷新标志色
+      const el = document.elementFromPoint(clientX, clientY) as HTMLElement | null;
+      const card = el ? el.closest('.project-card') : null;
+      const rgb = card ? getComputedStyle(card).getPropertyValue('--pc-rgb').trim() : '';
+      if (rgb) spot.style.setProperty('--spot-rgb', rgb);
     };
 
     const onMove = (e: MouseEvent) => {
@@ -234,10 +239,6 @@ export default function ProjectGallery({ projects }: { projects: Project[] }) {
         lastX = e.clientX; lastY = e.clientY;
         applySpot(lastX, lastY);
         if (!active) { active = true; spot.style.opacity = '1'; }
-        // 命中哪张卡就切到它的标志色
-        const card = (e.target as HTMLElement).closest('.project-card');
-        const rgb = card ? getComputedStyle(card).getPropertyValue('--pc-rgb').trim() : '';
-        if (rgb) spot.style.setProperty('--spot-rgb', rgb);
       });
     };
 
