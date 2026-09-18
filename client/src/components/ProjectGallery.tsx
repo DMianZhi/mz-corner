@@ -27,45 +27,39 @@ function ProjectCard({ p, index }: { p: Project; index: number }) {
     let raf = 0;
     let lastX = -1, lastY = -1;
 
-    const applyPose = (clientX: number, clientY: number, dur: number) => {
+    // 3D 倾斜跟随（高光已提升到长廊层，卡片只负责姿态）
+    const applyPose = (clientX: number, clientY: number) => {
       const r = card.getBoundingClientRect();
       const relX = (clientX - r.left) / r.width;
       const relY = (clientY - r.top) / r.height;
-      card.style.transition = `transform 100ms linear, --mx ${dur}ms cubic-bezier(0.22,1,0.36,1), --my ${dur}ms cubic-bezier(0.22,1,0.36,1)`;
+      card.style.transition = 'transform 100ms linear';
       card.style.transform = `perspective(1200px) rotateY(${(relX - 0.5) * 10}deg) rotateX(${-(relY - 0.5) * 10}deg) scale(1.015)`;
-      card.style.setProperty('--mx', `${relX * 100}%`);
-      card.style.setProperty('--my', `${relY * 100}%`);
     };
 
     const onMove = (e: MouseEvent) => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
-        const dist = lastX < 0 ? 999 : Math.hypot(e.clientX - lastX, e.clientY - lastY);
-        const dur = Math.round(Math.min(420, Math.max(120, dist * 3)));
-        applyPose(e.clientX, e.clientY, dur);
+        applyPose(e.clientX, e.clientY);
         lastX = e.clientX; lastY = e.clientY;
       });
     };
 
-    // 滚动驱动卡片横移时鼠标不动，相对位置已变 → 用缓存坐标重锚高光与倾斜
+    // 滚动驱动卡片横移时鼠标不动，相对位置已变 → 用缓存坐标重锚倾斜
     const onScroll = () => {
       if (lastX < 0) return;
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
         const r = card.getBoundingClientRect();
         const inside = lastX >= r.left && lastX <= r.right && lastY >= r.top && lastY <= r.bottom;
-        if (inside) applyPose(lastX, lastY, 90);
+        if (inside) applyPose(lastX, lastY);
       });
     };
 
     const onLeave = () => {
       cancelAnimationFrame(raf);
       lastX = -1; lastY = -1;
-      card.style.transition = 'transform 500ms cubic-bezier(0.16,1,0.3,1), --mx 500ms cubic-bezier(0.16,1,0.3,1), --my 500ms cubic-bezier(0.16,1,0.3,1)';
+      card.style.transition = 'transform 500ms cubic-bezier(0.16,1,0.3,1)';
       card.style.transform = 'perspective(1200px) rotateY(0) rotateX(0) scale(1)';
-      // 高光归位中心，下次划入从中心平滑追向鼠标，不再闪现
-      card.style.setProperty('--mx', '50%');
-      card.style.setProperty('--my', '50%');
     };
     card.addEventListener('mousemove', onMove);
     card.addEventListener('mouseleave', onLeave);
@@ -104,14 +98,6 @@ function ProjectCard({ p, index }: { p: Project; index: number }) {
         (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-soft)';
       }}
     >
-      {/* 高光层：标志色追踪光斑，位置由 @property 过渡平滑追赶鼠标 */}
-      <div
-        className="spotlight pointer-events-none absolute inset-0 hidden lg:block"
-        style={{
-          background: `radial-gradient(560px circle at var(--mx,50%) var(--my,50%), rgba(${rgb},0.16), transparent 42%)`,
-        }}
-      />
-
       {/* 状态徽章 */}
       {p.status && STATUS_LABEL[p.status] && (
         <span
@@ -217,6 +203,46 @@ export default function ProjectGallery({ projects }: { projects: Project[] }) {
     return () => window.removeEventListener('resize', check);
   }, []);
 
+  // 全局光斑：钉在鼠标视口坐标上（sticky 容器滚动不动，天然不脱锚），
+  // 跨卡片时光斑连续，仅颜色平滑切换到当前卡片标志色
+  const spotRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!isDesktop) return;
+    const section = sectionRef.current;
+    const spot = spotRef.current;
+    if (!section || !spot) return;
+    const fine = window.matchMedia('(pointer: fine)').matches;
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (!fine || reduced) return;
+
+    let raf = 0;
+    let active = false;
+    const onMove = (e: MouseEvent) => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        spot.style.setProperty('--sx', `${e.clientX}px`);
+        spot.style.setProperty('--sy', `${e.clientY}px`);
+        if (!active) { active = true; spot.style.opacity = '1'; }
+        // 命中哪张卡就切到它的标志色
+        const card = (e.target as HTMLElement).closest('.project-card');
+        const rgb = card ? getComputedStyle(card).getPropertyValue('--pc-rgb').trim() : '';
+        if (rgb) spot.style.setProperty('--spot-rgb', rgb);
+      });
+    };
+    const onLeave = () => {
+      cancelAnimationFrame(raf);
+      active = false;
+      spot.style.opacity = '0';
+    };
+    section.addEventListener('mousemove', onMove);
+    section.addEventListener('mouseleave', onLeave);
+    return () => {
+      cancelAnimationFrame(raf);
+      section.removeEventListener('mousemove', onMove);
+      section.removeEventListener('mouseleave', onLeave);
+    };
+  }, [isDesktop]);
+
   // 计算 section 高度 & 滚动映射
   useEffect(() => {
     if (!isDesktop || projects.length === 0) return;
@@ -313,6 +339,14 @@ export default function ProjectGallery({ projects }: { projects: Project[] }) {
 
   return (
     <section ref={sectionRef} className="relative" style={{ height: sectionH || '300vh' }}>
+      {/* 全局光斑：fixed 钉在鼠标视口坐标，跨卡连续，颜色随 hover 卡片切换 */}
+      <div
+        ref={spotRef}
+        className="gallery-spotlight pointer-events-none"
+        style={{
+          background: 'radial-gradient(520px circle at var(--sx,-999px) var(--sy,-999px), rgba(var(--spot-rgb,200,245,66),0.14), transparent 42%)',
+        }}
+      />
       <div
         className="sticky top-0 flex flex-col justify-center overflow-hidden"
         style={{ height: '100svh' }}
