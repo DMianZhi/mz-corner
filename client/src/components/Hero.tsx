@@ -3,6 +3,29 @@ import { useEffect, useRef } from 'react';
 /** Hero 鼠标视差（桌面端 + 非 reduced-motion） */
 export default function Hero() {
   const ref = useRef<HTMLElement>(null);
+  const wmRef = useRef<HTMLDivElement>(null);
+
+  // FULL-STACK 水印：字号动态计算占满视口宽度（实测 10 字符总宽 6.26em）
+  useEffect(() => {
+    const el = wmRef.current;
+    if (!el) return;
+    const fit = () => {
+      const vw = document.documentElement.clientWidth;
+      // gutter 是 clamp() 无法 parseFloat，用元素右缘到视口右缘的实际距离反推可用宽
+      const rightEdge = vw - Math.round(el.getBoundingClientRect().right);
+      const target = vw - rightEdge * 2;
+      el.style.fontSize = `${target / 6.26}px`;
+      // 实测校准：字符宽度比随字号非线性（kerning），按实际宽度二次修正
+      const actual = el.getBoundingClientRect().width;
+      if (actual > target && actual > 0) {
+        const fs = parseFloat(getComputedStyle(el).fontSize);
+        el.style.fontSize = `${fs * (target / actual)}px`;
+      }
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, []);
 
   useEffect(() => {
     const el = ref.current;
@@ -41,8 +64,8 @@ export default function Hero() {
       className="relative flex flex-col justify-center overflow-hidden"
       style={{ minHeight: '100svh', padding: '0 var(--gutter)' }}
     >
-      {/* 水印字：FULL-STACK 横排 + MZ 竖排错位叠加 */}
-      <div className="watermark hidden md:block" data-depth="0.015" style={{ right: 0, bottom: '6vh' }}>
+      {/* 水印字：FULL-STACK 横排（JS 动态字号占满视口宽） + MZ 竖排错位叠加 */}
+      <div ref={wmRef} className="watermark hidden md:block" data-depth="0.015" style={{ right: 'var(--gutter)', bottom: '6vh' }}>
         FULL-STACK
       </div>
       {/* 右侧错位 MZ 水印：完全复用 .watermark 材质，坐在大字基线上 */}
