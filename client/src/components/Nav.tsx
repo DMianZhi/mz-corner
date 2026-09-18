@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { MoonIcon, SunIcon } from '@/components/icon';
+import { useSiteConfig } from '@/components/SiteConfigContext';
 
 const links = [
   { to: '/', label: '项目' },
@@ -9,6 +10,7 @@ const links = [
 ];
 
 export default function Nav() {
+  const config = useSiteConfig();
   const [scrolled, setScrolled] = useState(false);
   const [light, setLight] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -59,9 +61,9 @@ export default function Nav() {
             className="inline-block h-4 w-4 rounded"
             style={{ background: 'var(--brand)', borderRadius: 4 }}
           />
-          <span className="text-base font-bold" style={{ color: 'var(--text-1)' }}>敏智</span>
+          <span className="text-base font-bold" style={{ color: 'var(--text-1)' }}>{config.name}</span>
           <span className="hidden sm:inline font-mono-site text-[11px]" style={{ color: 'var(--text-3)' }}>
-            MIN ZHI
+            {config.nameEn}
           </span>
         </a>
 

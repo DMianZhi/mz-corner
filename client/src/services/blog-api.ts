@@ -1,4 +1,4 @@
-import type { Article, Comment, ArticleListItem, PaginatedData, ArchiveData, Project } from '@/types/blog';
+import type { Article, Comment, ArticleListItem, PaginatedData, ArchiveData, Project, SiteConfig } from '@/types/blog';
 
 // 通过 Nitro 后端 /api/blog/* 访问 WPS 多维表（后端调用 kdocs CLI 代理）
 const BASE = './api/blog';
@@ -154,3 +154,8 @@ export async function getProjects(): Promise<Project[]> {
 }
 
 export { toTs };
+
+/** 站点配置（多维表动态管理） */
+export async function getSiteConfig(): Promise<SiteConfig> {
+  return apiGet<SiteConfig>(`${BASE}/config`);
+}

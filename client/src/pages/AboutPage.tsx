@@ -1,4 +1,5 @@
 import { MiniFooter } from '@/components/Footer';
+import { useSiteConfig } from '@/components/SiteConfigContext';
 
 const TIMELINE = [
   { year: '2026', text: '全栈开发 · 持续交付中' },
@@ -7,6 +8,7 @@ const TIMELINE = [
 ];
 
 export default function AboutPage() {
+  const config = useSiteConfig();
   return (
     <div className="page-enter" style={{ paddingTop: 'calc(var(--nav-h) + 48px)' }}>
       <div className="mx-auto" style={{ maxWidth: 'var(--content-w)', padding: '0 var(--gutter)' }}>
@@ -29,12 +31,10 @@ export default function AboutPage() {
           </div>
           <div className="md:col-span-8">
             <p style={{ fontSize: 18, lineHeight: 1.8, color: 'var(--text-2)' }}>
-              我是敏智，一名全栈开发者。喜欢把想法变成能跑的产品，
-              关注前端体验与工程效率。这个网站既是我的项目陈列室，
-              也是我写字的地方。
+              {config.bio}
             </p>
             <div className="mt-8 flex flex-wrap gap-2">
-              {['React', 'TypeScript', 'Node.js', 'Nitro', 'Tailwind', 'Go'].map((s) => (
+              {config.skills.map((s) => (
                 <span
                   key={s}
                   className="font-mono-site"

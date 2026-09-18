@@ -9,6 +9,7 @@ import PostPage from "@/pages/PostPage";
 import ArchivePage from "@/pages/ArchivePage";
 import AboutPage from "@/pages/AboutPage";
 import { SearchPage } from "@/pages/SearchPage";
+import { ConfigProvider } from "@/components/SiteConfigContext";
 
 // HashRouter 不会自动重置滚动位置：路由变化时手动回到顶部
 function ScrollToTop() {
@@ -22,6 +23,7 @@ function ScrollToTop() {
 export function App() {
   return (
     <HashRouter>
+      <ConfigProvider>
       <ScrollToTop />
       <Layout>
         <Routes>
@@ -34,6 +36,7 @@ export function App() {
         </Routes>
       </Layout>
       <Toaster position="top-center" />
+      </ConfigProvider>
     </HashRouter>
   );
 }

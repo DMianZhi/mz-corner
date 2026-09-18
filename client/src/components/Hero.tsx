@@ -1,7 +1,9 @@
 import { useEffect, useRef } from 'react';
+import { useSiteConfig } from '@/components/SiteConfigContext';
 
 /** Hero 鼠标视差（桌面端 + 非 reduced-motion） */
 export default function Hero() {
+  const config = useSiteConfig();
   const ref = useRef<HTMLElement>(null);
   const wmRef = useRef<HTMLDivElement>(null);
 
@@ -125,7 +127,7 @@ export default function Hero() {
             left: -40, top: 'clamp(12px, 2vw, 32px)',
           }}
         />
-        <h1 className="text-display m-0" style={{ color: 'var(--text-1)' }}>敏智</h1>
+        <h1 className="text-display m-0" style={{ color: 'var(--text-1)' }}>{config.name}</h1>
         <h1
           className="text-display m-0"
           style={{ color: 'var(--text-1)', marginLeft: 'clamp(40px, 12vw, 200px)' }}
@@ -135,7 +137,7 @@ export default function Hero() {
       </div>
 
       <div className="mt-3 font-mono-site" style={{ fontSize: 13, letterSpacing: '0.14em', color: 'var(--text-3)' }}>
-        MIN ZHI — FULL-STACK DEVELOPER
+        {config.nameEn} — {config.role}
       </div>
 
       {/* 宣言 */}
@@ -152,7 +154,7 @@ export default function Hero() {
         className="absolute left-0 right-0 flex items-end justify-between font-mono-site"
         style={{ bottom: 32, padding: '0 var(--gutter)', fontSize: 12, color: 'var(--text-3)' }}
       >
-        <span className="hidden sm:inline">31.23°N, 121.47°E — SHANGHAI</span>
+        <span className="hidden sm:inline">{config.location}</span>
         <span className="hidden md:flex flex-col items-center gap-1">
           <span style={{ letterSpacing: '0.2em' }}>SCROLL</span>
           <span className="scroll-hint inline-block">↓</span>
