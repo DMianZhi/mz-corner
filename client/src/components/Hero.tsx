@@ -48,16 +48,17 @@ export default function Hero() {
       <div
         className="hidden lg:block"
         aria-hidden="true"
-        style={{ position: 'absolute', right: 'clamp(24px, 4vw, 72px)', top: '50%', transform: 'translateY(-50%)' }}
+        style={{ position: 'absolute', left: 'clamp(420px, 52vw, 780px)', top: '50%', transform: 'translateY(-50%)' }}
       >
         <div
           className="watermark"
           data-depth="0.03"
           style={{
             writingMode: 'vertical-rl',
-            fontSize: 'clamp(120px, 16vw, 240px)',
+            fontSize: 'clamp(120px, 13vw, 200px)',
             letterSpacing: '-0.04em',
             lineHeight: 1,
+            WebkitTextStroke: '1px rgba(255,255,255,0.12)',
           }}
         >
           MZ
