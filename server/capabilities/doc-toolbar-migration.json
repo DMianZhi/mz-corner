@@ -1,0 +1,17 @@
+{
+  "version": "001_doc_comment",
+  "description": "创建文档评论表，所有登录用户可读，仅作者可修改/删除自己的评论",
+  "operations": [
+    {
+      "type": "schema",
+      "action": "create_table",
+      "table": "doc_comment",
+      "params": {
+        "columns": [
+          { "name": "content", "type": "text" }
+        ]
+      },
+      "access": "owner_write_public_read"
+    }
+  ]
+}

@@ -1,0 +1,360 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+}
+
+/* ============================================================
+   「暗室色标 / Color Index」设计系统 v2.0
+   深色画廊基底 + 项目标志色方块 + ease-out-expo 动效
+   ============================================================ */
+
+:root {
+  --radius: 0.75rem;
+
+  /* --- 深色基底（默认） --- */
+  --bg: #0A0A0B;
+  --bg-raised: #131316;
+  --bg-card: #17171B;
+  --bg-hover: #1E1E24;
+  --border-soft: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --text-1: #F5F5F4;
+  --text-2: #A6A6AD;
+  --text-3: #5F5F66;
+
+  /* 站点信号色（酸性黄绿） */
+  --brand: #C8F542;
+  --brand-ink: #141800;
+  --brand-dim: rgba(200, 245, 66, 0.14);
+
+  --danger: #FF5C5C;
+  --success: #3DD68C;
+
+  /* --- shadcn 令牌桥接（hex，禁 oklch） --- */
+  --background: #0A0A0B;
+  --foreground: #F5F5F4;
+  --card: #17171B;
+  --card-foreground: #F5F5F4;
+  --popover: #1E1E24;
+  --popover-foreground: #F5F5F4;
+  --primary: #C8F542;
+  --primary-foreground: #141800;
+  --secondary: #1E1E24;
+  --secondary-foreground: #F5F5F4;
+  --muted: #1E1E24;
+  --muted-foreground: #A6A6AD;
+  --accent: #1E1E24;
+  --accent-foreground: #F5F5F4;
+  --destructive: #FF5C5C;
+  --destructive-foreground: #0A0A0B;
+  --border: #26262B;
+  --input: #26262B;
+  --ring: #C8F542;
+
+  /* --- 字体栈 --- */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono",
+    Consolas, "Liberation Mono", monospace;
+
+  /* --- 布局 --- */
+  --gutter: clamp(20px, 4.5vw, 72px);
+  --container: 1520px;
+  --content-w: 1080px; /* 信息页统一内容宽度（列表/归档/关于） */
+  --read-w: 760px;     /* 阅读页宽度（文章详情） */
+  --nav-h: 64px;
+  --bg-nav-scrolled: rgba(10, 10, 11, 0.55);
+
+  /* --- 动效令牌 --- */
+  --ease-standard: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-emphasis: cubic-bezier(0.83, 0, 0.17, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dur-fast: 150ms;
+  --dur-med: 300ms;
+  --dur-slow: 600ms;
+}
+
+/* --- 浅色方案 --- */
+html.light {
+  --bg: #FAFAF8;
+  --bg-raised: #FFFFFF;
+  --bg-card: #FFFFFF;
+  --bg-hover: #F1F1EC;
+  --bg-nav-scrolled: rgba(250, 250, 248, 0.7);
+  --border-soft: rgba(20, 20, 22, 0.1);
+  --border-strong: rgba(20, 20, 22, 0.2);
+  --text-1: #141416;
+  --text-2: #55555C;
+  --text-3: #9B9BA1;
+  --brand: #6E9E06;
+  --brand-ink: #FFFFFF;
+  --brand-dim: rgba(110, 158, 6, 0.12);
+  --danger: #D93636;
+  --success: #1F9D63;
+
+  --background: #FAFAF8;
+  --foreground: #141416;
+  --card: #FFFFFF;
+  --card-foreground: #141416;
+  --popover: #FFFFFF;
+  --popover-foreground: #141416;
+  --primary: #6E9E06;
+  --primary-foreground: #FFFFFF;
+  --secondary: #F1F1EC;
+  --secondary-foreground: #141416;
+  --muted: #F1F1EC;
+  --muted-foreground: #55555C;
+  --accent: #F1F1EC;
+  --accent-foreground: #141416;
+  --destructive: #D93636;
+  --destructive-foreground: #FFFFFF;
+  --border: #E4E4E0;
+  --input: #E4E4E0;
+  --ring: #6E9E06;
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text-1);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--brand);
+  color: var(--brand-ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+}
+
+/* ============ 通用工具类 ============ */
+
+.font-mono-site {
+  font-family: var(--font-mono);
+}
+
+.label-site {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+
+.kicker-site {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  color: var(--text-3);
+}
+.kicker-site .kicker-num {
+  color: var(--brand);
+  margin-right: 8px;
+}
+
+.text-display {
+  font-size: clamp(64px, 13vw, 176px);
+  line-height: 0.92;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+.text-h1-site {
+  font-size: clamp(40px, 7vw, 96px);
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.text-h2-site {
+  font-size: clamp(30px, 4.5vw, 56px);
+  line-height: 1.05;
+  font-weight: 700;
+}
+
+.watermark {
+  position: absolute;
+  font-size: clamp(120px, 18vw, 320px);
+  font-weight: 800;
+  line-height: 1;
+  color: transparent;
+  -webkit-text-stroke: 1px rgba(255, 255, 255, 0.07);
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+}
+html.light .watermark {
+  -webkit-text-stroke-color: rgba(20, 20, 22, 0.06);
+}
+
+/* 链接下划线动画 */
+.link-underline {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-size: 0% 2px;
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  transition: background-size 280ms var(--ease-standard);
+  padding-bottom: 2px;
+}
+.link-underline:hover {
+  background-size: 100% 2px;
+}
+
+/* 磁吸邮箱链接：下划线由 JS 写入的 --mag（0~1 接近程度）驱动，与位移同源，
+   避免 CSS hover 在元素位移时几何抖动导致的闪烁 */
+.mail-magnetic {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-size: calc(var(--mag, 0) * 100%) 2px;
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  padding-bottom: 2px;
+}
+
+/* 代码块复制按钮：品牌色胶囊，hover 加深增强反馈（两种主题模式下对比度均达标） */
+.md-copy-btn:hover {
+  color: var(--brand-ink, #141800) !important;
+  background: var(--brand, #C8F542) !important;
+  border-color: var(--brand, #C8F542) !important;
+}
+
+/* 骨架屏微光：低亮扫光，深浅两主题共用 currentColor 体系 */
+.skeleton-bar {
+  background: linear-gradient(
+    90deg,
+    var(--bg-hover) 0%,
+    var(--bg-hover) 40%,
+    var(--border-soft) 50%,
+    var(--bg-hover) 60%,
+    var(--bg-hover) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes skeleton-shimmer {
+  0% { background-position: 120% 0; }
+  100% { background-position: -80% 0; }
+}
+.skeleton-text {
+  /* 文字完全透明：只借字体度量撑宽高，不做任何字形显示 */
+  color: transparent !important;
+  user-select: none;
+  pointer-events: none;
+  position: relative;
+  display: inline-block;
+}
+/* 可见层：与文本同宽的圆角色块条（经典骨架外观，宽高随字体度量 */
+.skeleton-text::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+  background-image: linear-gradient(
+    90deg,
+    var(--bg-hover) 0%,
+    var(--bg-hover) 40%,
+    var(--border-soft) 50%,
+    var(--bg-hover) 60%,
+    var(--bg-hover) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-bar, .skeleton-text::before { animation: none; }
+  .skeleton-text { color: transparent !important; }
+}
+
+/* 页面入场 */
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.page-enter {
+  animation: page-in 450ms var(--ease-standard) 60ms both;
+}
+
+/* 滚动提示箭头 */
+@keyframes scroll-hint {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(8px); }
+}
+.scroll-hint {
+  animation: scroll-hint 1.6s ease-in-out infinite;
+}
+
+/* 状态呼吸点 */
+@keyframes breathe {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+.breathe-dot {
+  animation: breathe 2s ease-in-out infinite;
+}
+
+/* 卡片入场 */
+@keyframes card-in {
+  from { opacity: 0; transform: translateY(40px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.card-enter {
+  animation: card-in 700ms var(--ease-standard) both;
+}
+
+/* 动效降级 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* --- space-y fallback（Chrome <112） --- */
+.space-y-1 > * + * { margin-top: 0.25rem; }
+.space-y-2 > * + * { margin-top: 0.5rem; }
+.space-y-3 > * + * { margin-top: 0.75rem; }
+.space-y-4 > * + * { margin-top: 1rem; }
+.space-y-6 > * + * { margin-top: 1.5rem; }
+
+@media (min-width: 640px) {
+  .sm\:grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (min-width: 1024px) {
+  .lg\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
