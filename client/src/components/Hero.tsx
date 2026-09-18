@@ -11,9 +11,8 @@ export default function Hero() {
     if (!el) return;
     const fit = () => {
       const vw = document.documentElement.clientWidth;
-      // gutter 是 clamp() 无法 parseFloat，用元素右缘到视口右缘的实际距离反推可用宽
-      const rightEdge = vw - Math.round(el.getBoundingClientRect().right);
-      const target = vw - rightEdge * 2;
+      // 出血式铺满：直接占满视口宽度，两侧零留白
+      const target = vw;
       el.style.fontSize = `${target / 6.26}px`;
       // 实测校准：字符宽度比随字号非线性（kerning），按实际宽度二次修正
       const actual = el.getBoundingClientRect().width;
@@ -65,7 +64,7 @@ export default function Hero() {
       style={{ minHeight: '100svh', padding: '0 var(--gutter)' }}
     >
       {/* 水印字：FULL-STACK 横排（JS 动态字号占满视口宽） + MZ 竖排错位叠加 */}
-      <div ref={wmRef} className="watermark hidden md:block" data-depth="0.015" style={{ right: 'var(--gutter)', bottom: '6vh' }}>
+      <div ref={wmRef} className="watermark hidden md:block" data-depth="0.015" style={{ right: 0, bottom: '6vh' }}>
         FULL-STACK
       </div>
       {/* 右侧错位 MZ 水印：完全复用 .watermark 材质，坐在大字基线上 */}
