@@ -45,7 +45,7 @@ export default function Hero() {
       <div className="watermark hidden md:block" data-depth="0.015" style={{ right: '-2vw', bottom: '6vh' }}>
         FULL-STACK
       </div>
-      {/* 右侧错位 MZ 水印：坐在大字基线上，像落款签名；与 FULL-STACK 同材质描边 */}
+      {/* 右侧错位 MZ 水印：完全复用 .watermark 材质，坐在大字基线上 */}
       <div
         className="hidden lg:block"
         aria-hidden="true"
@@ -55,28 +55,18 @@ export default function Hero() {
           top: 'calc(50% - clamp(64px, 13vw, 176px) * 0.92 + 104px)',
         }}
       >
-        <div data-depth="0.03" style={{ position: 'relative', lineHeight: 0.82 }}>
-          {/* M：空心描边（与 FULL-STACK 同材质 1px） */}
+        <div data-depth="0.03" style={{ position: 'relative' }}>
+          {/* M：原生 watermark 材质，仅缩小字号；作为 Z 的锚定基准 */}
+          <div className="watermark" style={{ fontSize: 'clamp(120px, 12vw, 190px)', position: 'relative' }}>
+            M
+          </div>
+          {/* Z：同材质，右下错开 */}
           <div
             className="watermark"
             style={{
-              fontSize: 'clamp(120px, 12vw, 190px)',
-              fontWeight: 800,
-              letterSpacing: '-0.02em',
-            }}
-          >
-            M
-          </div>
-          {/* Z：错开右缩 + 实心极淡填充，坐在 M 右下 */}
-          <div
-            style={{
-              position: 'absolute',
-              right: 'clamp(-70px, -5vw, -40px)',
-              bottom: '-0.12em',
               fontSize: 'clamp(70px, 7vw, 110px)',
-              fontWeight: 800,
-              letterSpacing: '-0.02em',
-              color: 'rgba(200,245,66,0.10)',
+              right: 'clamp(-70px, -5vw, -40px)',
+              bottom: '-0.1em',
             }}
           >
             Z
@@ -86,7 +76,7 @@ export default function Hero() {
             data-depth="0.05"
             style={{
               position: 'absolute',
-              left: -30, top: '0.1em',
+              left: -30, top: '0.12em',
               width: 16, height: 16, borderRadius: 4,
               background: 'var(--brand)',
             }}
