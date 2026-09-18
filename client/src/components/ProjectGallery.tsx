@@ -25,25 +25,42 @@ function ProjectCard({ p, index }: { p: Project; index: number }) {
     if (!fine || !wide || reduced) return;
 
     let raf = 0;
-    let lastX = 0, lastY = 0;
+    let lastX = -1, lastY = -1;
+
+    const applyPose = (clientX: number, clientY: number, dur: number) => {
+      const r = card.getBoundingClientRect();
+      const relX = (clientX - r.left) / r.width;
+      const relY = (clientY - r.top) / r.height;
+      card.style.transition = `transform 100ms linear, --mx ${dur}ms cubic-bezier(0.22,1,0.36,1), --my ${dur}ms cubic-bezier(0.22,1,0.36,1)`;
+      card.style.transform = `perspective(1200px) rotateY(${(relX - 0.5) * 10}deg) rotateX(${-(relY - 0.5) * 10}deg) scale(1.015)`;
+      card.style.setProperty('--mx', `${relX * 100}%`);
+      card.style.setProperty('--my', `${relY * 100}%`);
+    };
+
     const onMove = (e: MouseEvent) => {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
-        const r = card.getBoundingClientRect();
-        const relX = (e.clientX - r.left) / r.width;
-        const relY = (e.clientY - r.top) / r.height;
-        // 旋转跟随（快响应）+ 高光追赶（自适应时长）
-        const dist = Math.hypot(e.clientX - lastX, e.clientY - lastY);
+        const dist = lastX < 0 ? 999 : Math.hypot(e.clientX - lastX, e.clientY - lastY);
         const dur = Math.round(Math.min(420, Math.max(120, dist * 3)));
-        card.style.transition = `transform 100ms linear, --mx ${dur}ms cubic-bezier(0.22,1,0.36,1), --my ${dur}ms cubic-bezier(0.22,1,0.36,1)`;
-        card.style.transform = `perspective(1200px) rotateY(${(relX - 0.5) * 10}deg) rotateX(${-(relY - 0.5) * 10}deg) scale(1.015)`;
+        applyPose(e.clientX, e.clientY, dur);
         lastX = e.clientX; lastY = e.clientY;
-        card.style.setProperty('--mx', `${relX * 100}%`);
-        card.style.setProperty('--my', `${relY * 100}%`);
       });
     };
+
+    // 滚动驱动卡片横移时鼠标不动，相对位置已变 → 用缓存坐标重锚高光与倾斜
+    const onScroll = () => {
+      if (lastX < 0) return;
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const r = card.getBoundingClientRect();
+        const inside = lastX >= r.left && lastX <= r.right && lastY >= r.top && lastY <= r.bottom;
+        if (inside) applyPose(lastX, lastY, 90);
+      });
+    };
+
     const onLeave = () => {
       cancelAnimationFrame(raf);
+      lastX = -1; lastY = -1;
       card.style.transition = 'transform 500ms cubic-bezier(0.16,1,0.3,1), --mx 500ms cubic-bezier(0.16,1,0.3,1), --my 500ms cubic-bezier(0.16,1,0.3,1)';
       card.style.transform = 'perspective(1200px) rotateY(0) rotateX(0) scale(1)';
       // 高光归位中心，下次划入从中心平滑追向鼠标，不再闪现
@@ -52,10 +69,12 @@ function ProjectCard({ p, index }: { p: Project; index: number }) {
     };
     card.addEventListener('mousemove', onMove);
     card.addEventListener('mouseleave', onLeave);
+    window.addEventListener('scroll', onScroll, { passive: true });
     return () => {
       cancelAnimationFrame(raf);
       card.removeEventListener('mousemove', onMove);
       card.removeEventListener('mouseleave', onLeave);
+      window.removeEventListener('scroll', onScroll);
     };
   }, []);
 
