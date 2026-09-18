@@ -45,34 +45,38 @@ export default function Hero() {
       <div className="watermark hidden md:block" data-depth="0.015" style={{ right: '-2vw', bottom: '6vh' }}>
         FULL-STACK
       </div>
-      {/* 右侧错位 MZ 水印：镜像大字错位结构，与「敏智」色标方块对角呼应 */}
+      {/* 右侧错位 MZ 水印：坐在大字基线上，像落款签名；与 FULL-STACK 同材质描边 */}
       <div
         className="hidden lg:block"
         aria-hidden="true"
-        style={{ position: 'absolute', left: 'clamp(560px, 54vw, 860px)', top: '50%', transform: 'translateY(-50%)' }}
+        style={{
+          position: 'absolute',
+          left: 'clamp(560px, 54vw, 860px)',
+          top: 'calc(50% - clamp(64px, 13vw, 176px) * 0.92 + 104px)',
+        }}
       >
-        <div data-depth="0.03" style={{ position: 'relative', lineHeight: 0.86 }}>
-          {/* M：超大空心描边 */}
+        <div data-depth="0.03" style={{ position: 'relative', lineHeight: 0.82 }}>
+          {/* M：空心描边（与 FULL-STACK 同材质 1px） */}
           <div
             className="watermark"
             style={{
-              fontSize: 'clamp(150px, 15vw, 230px)',
+              fontSize: 'clamp(120px, 12vw, 190px)',
               fontWeight: 800,
               letterSpacing: '-0.02em',
-              WebkitTextStroke: '1.5px rgba(255,255,255,0.14)',
             }}
           >
             M
           </div>
-          {/* Z：错开右缩 + 实心极淡填充 */}
+          {/* Z：错开右缩 + 实心极淡填充，坐在 M 右下 */}
           <div
             style={{
-              fontSize: 'clamp(90px, 9vw, 140px)',
+              position: 'absolute',
+              right: 'clamp(-70px, -5vw, -40px)',
+              bottom: '-0.12em',
+              fontSize: 'clamp(70px, 7vw, 110px)',
               fontWeight: 800,
               letterSpacing: '-0.02em',
               color: 'rgba(200,245,66,0.10)',
-              marginLeft: 'clamp(60px, 6vw, 96px)',
-              marginTop: '-0.06em',
             }}
           >
             Z
@@ -82,7 +86,7 @@ export default function Hero() {
             data-depth="0.05"
             style={{
               position: 'absolute',
-              right: -34, top: -26,
+              left: -30, top: '0.1em',
               width: 16, height: 16, borderRadius: 4,
               background: 'var(--brand)',
             }}
