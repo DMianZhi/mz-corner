@@ -359,13 +359,14 @@ html.light .watermark {
   .lg\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
-/* ── 长廊全局光斑：fixed 钉在鼠标视口坐标，跨卡连续 ── */
+/* ── 长廊全局光斑：absolute 在 sticky 视口容器内，跨卡连续 ── */
 .gallery-spotlight {
-  position: fixed;
+  position: absolute;
   inset: 0;
-  z-index: 1;
+  z-index: 2;
   opacity: 0;
   transition: opacity 350ms ease, background 300ms ease;
+  mix-blend-mode: screen;
 }
 @media (prefers-reduced-motion: reduce) {
   .gallery-spotlight { display: none; }
