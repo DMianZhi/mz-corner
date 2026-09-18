@@ -11,8 +11,8 @@ export default function Hero() {
     if (!el) return;
     const fit = () => {
       const vw = document.documentElement.clientWidth;
-      // 出血式铺满：直接占满视口宽度，两侧零留白
-      const target = vw;
+      // 出血式铺满：占满视口宽度，但两端各留 2px 描边余量（overflow-hidden 祖先会裁切贴边的 ink overflow）
+      const target = vw - 4;
       el.style.fontSize = `${target / 6.26}px`;
       // 实测校准：字符宽度比随字号非线性（kerning），按实际宽度二次修正
       const actual = el.getBoundingClientRect().width;
