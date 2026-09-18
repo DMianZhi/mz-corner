@@ -73,14 +73,20 @@ export default function AboutPage() {
         <div className="mt-20">
           <h2 className="m-0" style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-1)' }}>联系</h2>
           <div className="mt-6 flex flex-wrap gap-6">
-            {['GitHub', 'Twitter', 'lisi@example.com'].map((s) => (
+            {[
+              ...(config.github ? [{ label: 'GitHub', href: config.github }] : []),
+              ...(config.twitter ? [{ label: 'Twitter', href: config.twitter }] : []),
+              { label: config.email, href: `mailto:${config.email}` },
+            ].map((s) => (
               <a
-                key={s}
-                href={s.includes('@') ? `mailto:${s}` : '#/'}
+                key={s.label}
+                href={s.href}
+                target={s.href.startsWith('http') ? '_blank' : undefined}
+                rel="noreferrer"
                 className="link-underline font-mono-site no-underline"
                 style={{ fontSize: 14, color: 'var(--text-2)' }}
               >
-                {s}
+                {s.label}
               </a>
             ))}
           </div>
