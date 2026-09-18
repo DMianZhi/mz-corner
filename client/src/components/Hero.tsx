@@ -1,8 +1,14 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { getProjects, type Project } from '@/services/blog-api';
 
-/** Hero 鼠标视差（桌面端 + 非 reduced-motion） */
+/** Hero 鼠标视差（桌面端 + 非 reduced-motion）+ 右侧项目色标阵列 */
 export default function Hero() {
   const ref = useRef<HTMLElement>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+
+  useEffect(() => {
+    getProjects().then((ps) => setProjects(ps.slice(0, 4))).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const el = ref.current;
@@ -45,23 +51,41 @@ export default function Hero() {
       <div className="watermark hidden md:block" data-depth="0.015" style={{ right: '-2vw', bottom: '6vh' }}>
         FULL-STACK
       </div>
+      {/* 右侧项目色标阵列：镜像大字错位结构，预告长廊内容 */}
       <div
         className="hidden lg:block"
         aria-hidden="true"
-        style={{ position: 'absolute', left: 'clamp(420px, 52vw, 780px)', top: '50%', transform: 'translateY(-50%)' }}
+        style={{ position: 'absolute', left: 'clamp(560px, 56vw, 900px)', top: '50%', transform: 'translateY(-50%)' }}
       >
-        <div
-          className="watermark"
-          data-depth="0.03"
-          style={{
-            writingMode: 'vertical-rl',
-            fontSize: 'clamp(120px, 13vw, 200px)',
-            letterSpacing: '-0.04em',
-            lineHeight: 1,
-            WebkitTextStroke: '1px rgba(255,255,255,0.12)',
-          }}
-        >
-          MZ
+        <div data-depth="0.03" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {projects.map((p, i) => (
+            <div
+              key={p.id}
+              className="hero-chip"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                marginLeft: i % 2 === 1 ? 44 : 0,
+                opacity: 0,
+                animation: `hero-chip-in 600ms ease ${200 + i * 120}ms forwards`,
+              }}
+            >
+              <span
+                style={{
+                  width: 22, height: 22, borderRadius: 5, flexShrink: 0,
+                  background: p.color,
+                  boxShadow: `0 0 18px ${p.color}55`,
+                }}
+              />
+              <span
+                className="font-mono-site"
+                style={{ fontSize: 11, letterSpacing: '0.16em', color: 'var(--text-3)' }}
+              >
+                {p.name}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
 
