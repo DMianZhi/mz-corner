@@ -157,7 +157,12 @@ body {
 }
 
 /* 亮色模式：纸纹噪点肌理（独立覆盖层 .grain-overlay，消除大面积纯色的塑料感） */
+.grain-overlay {
+  display: none;
+}
+
 html.light .grain-overlay {
+  display: block;
   position: fixed;
   inset: 0;
   z-index: 9999;
