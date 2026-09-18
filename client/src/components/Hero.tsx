@@ -41,9 +41,27 @@ export default function Hero() {
       className="relative flex flex-col justify-center overflow-hidden"
       style={{ minHeight: '100svh', padding: '0 var(--gutter)' }}
     >
-      {/* 水印字 */}
+      {/* 水印字：FULL-STACK 横排 + MZ 竖排错位叠加 */}
       <div className="watermark hidden md:block" data-depth="0.015" style={{ right: '-2vw', bottom: '6vh' }}>
         FULL-STACK
+      </div>
+      <div
+        className="hidden lg:block"
+        aria-hidden="true"
+        style={{ position: 'absolute', right: 'clamp(24px, 4vw, 72px)', top: '50%', transform: 'translateY(-50%)' }}
+      >
+        <div
+          className="watermark"
+          data-depth="0.03"
+          style={{
+            writingMode: 'vertical-rl',
+            fontSize: 'clamp(120px, 16vw, 240px)',
+            letterSpacing: '-0.04em',
+            lineHeight: 1,
+          }}
+        >
+          MZ
+        </div>
       </div>
 
       {/* 状态徽章 */}
