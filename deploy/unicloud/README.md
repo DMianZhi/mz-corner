@@ -171,6 +171,13 @@ pnpm run deploy:unicloud -- --skip-build  # 复用现有产物，只做上传 + 
 
 数据源是**同服务空间的云数据库**，不需要任何第三方凭据，也没有会过期的令牌。
 
+> **环境变量只能在这里配（CLI 与产物都不行，实测）**：
+> ① `cli cloud functions` 的资源类型只有 `cloudfunction | common | db | vf | action | space`，没有环境变量；
+> ② 在云函数目录放 `.env` **不会**随上传同步——实测写 `SEED_TOKEN=probe-abc123` 后上传，
+> 云端 `/api/admin/seed` 仍回 404（= 未读到该变量）。官方文档也说明 `.env` 存的是
+> **本地值**（供本地运行用），远程值由 IDE/控制台界面保存。
+> 保存后实时生效，不需要重新部署云函数。
+
 > **为什么覆盖 `provider` 要用 `NITRO_` 前缀**：`nitro.config.ts` 里 `runtimeConfig` 的默认值会被
 > **构建期内联进产物**，运行期改普通环境变量对它无效；要覆盖必须用 `NITRO_` + 路径（大写下划线），
 > 如 `NITRO_BLOG_PROVIDER=...`。数据层自己读的变量（`BLOG_DATA_PROVIDER`）只在「未经宿主注入」时兜底
@@ -269,7 +276,14 @@ VITE_API_BASE=https://<unicloud-space-id>.dev-hz.cloudbasefunction.cn/mz-api pnp
 
 控制台 → 云函数 → `mz-corner-api` → **安全域名 / 跨域配置** → 添加前端网页托管的域名。
 
-未配置时浏览器会拦请求（适配层已短路处理 OPTIONS 预检，但正式请求仍会被网关拦下）。
+> **实测：预检由网关应答，不进云函数**。对不存在的路径发 OPTIONS 也回 `200` + 空体 +
+> `content-type: application/json`（而同一路径的 GET 会打到函数并回 500），说明
+> 适配层里的「OPTIONS 短路」在云端**不会被执行**，预检头只能由上面的控制台配置产生。
+>
+> 影响面可控：GET 不带自定义请求头**不触发预检**（所以文章读取一直正常），
+> 只有带 `application/json` 的 POST（提交评论）会被浏览器拦下。
+> 自检脚本第 3 项专门测这个，未通过时给的处置就是这个控制台配置。
+
 同时建议把云函数环境变量 `CORS_ORIGIN` 设为该域名（不设则为 `*`）。
 
 ## 步骤 8：验证
@@ -344,6 +358,8 @@ uniCloud 云函数要返回 `{ statusCode, headers, body }` 这种「集成响�
 | 500 + 集合不存在 / `DATABASE_COLLECTION_NOT_EXIST` | 集合没建（`--skip-db` 部署过，或首次部署漏了） | `pnpm run deploy:unicloud` 重新部署（会自动上传 `database/*.schema.json` 建集合），或在控制台手动建 4 个集合 |
 | `GET /api/health` 里 `database=unavailable` | 云函数运行时没有注入 `uniCloud` 全局（本地裸跑 Node 时必然如此） | 云端出现才需处理：确认部署的是最新产物；本地用 `pnpm run harness:unicloud` 会注入内存假库 |
 | `POST /api/admin/seed` 回 403 | `SEED_TOKEN` 没配或与请求头 `x-seed-token` 不一致 | 在云函数环境变量里配 `SEED_TOKEN`，请求时带同一值 |
+| `POST /api/admin/seed` 回 **404** | 云端没读到 `SEED_TOKEN`（未配置，或以为 `.env` 会随上传同步） | 到控制台云函数「环境变量」里配；CLI 与 `.env` 都传不上去（实测） |
+| 自检第 3 项「OPTIONS 预检」失败 | OPTIONS 被网关截住、不进云函数，预检头只能由控制台跨域配置产生 | 控制台 → 云函数 → 「安全域名/跨域配置」放行前端域名；GET 读取不受影响，仅 POST 评论会被浏览器拦 |
 | 接口 200 但列表恒为空 | 数据还没迁进云数据库 | 跑一次「步骤 4」的数据迁移（迁移后 `posts` 应有 23 篇） |
 | 前端报 CORS | `CORS_ORIGIN` 与静态站域名不一致，或未配安全域名 | 云函数「安全域名」里放行前端域名，并把 `CORS_ORIGIN` 改成静态站实际域名（或留空为 `*`） |
 | 全部 404 | URL 化前缀与请求路径不匹配 | 核对控制台里配的访问路径与请求 URL 前缀是否一致（本项目为 `/mz-api`），不一致时同步设 `UNICLOUD_URL_PREFIX` |

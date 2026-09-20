@@ -108,6 +108,7 @@ if (!args["skip-db"]) {
   for (const file of readdirSync(path.join(projectDir, "database")).filter((f) => f.endsWith(".schema.json"))) {
     const collection = file.replace(".schema.json", "");
     console.log(`→ 上传集合 Schema ${collection}`);
+    // --name 要的是文件名（实测传集合名会报「schema 文件名必须以 '.schema.json' 结尾」）
     runCli(cliPath, [
       "cloud",
       "functions",
@@ -118,7 +119,7 @@ if (!args["skip-db"]) {
       "--provider",
       provider,
       "--name",
-      collection,
+      file,
     ]);
   }
 }

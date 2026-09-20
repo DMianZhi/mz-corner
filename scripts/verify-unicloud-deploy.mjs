@@ -159,14 +159,20 @@ if (postsRes.error || postsRes.status !== 200) {
     record(
       "GET /api/blog/posts",
       false,
-      "接口通但返回 0 条：检查云数据库 articles 集合是否有 status=published 的文章（数据未迁移时先跑 scripts/seed-unicloud.mjs）",
+      "接口通但返回 0 条：检查云数据库 articles 集合是否有 status=published 的文章（数据未迁移时先跑 pnpm run migrate:unicloud）",
     );
   } else {
     record("GET /api/blog/posts", true, `${items.length} 条，首条标题：${items[0]?.title ?? "(无标题)"}`);
   }
 }
 
-/* 3. CORS 预检 —— 静态托管与云函数跨域时必须通过 */
+/*
+ * 3. CORS 预检 —— 静态托管与云函数跨域时必须通过。
+ *
+ * 实测：支付宝云网关会**直接应答 OPTIONS**（连不存在的路径都回 200 空体、不进入云函数），
+ * 因此适配层里的预检短路在云端不会被执行，预检头只能由控制台的跨域配置产生。
+ * 影响面：GET 不带自定义请求头不触发预检（读取正常），只有带 application/json 的 POST 会受影响。
+ */
 const preflightOrigin = origin || "https://example.invalid";
 const preflight = unwrap(await probe("/api/blog/posts", {
   method: "OPTIONS",
@@ -187,8 +193,8 @@ if (preflight.error) {
     ok
       ? `allow-origin=${acao}`
       : acao
-        ? `allow-origin=${acao} 未包含 ${preflightOrigin}：改 CORS_ORIGIN 或在云函数「安全域名」里放行`
-        : "响应缺少 access-control-allow-origin：前端会被浏览器拦截",
+        ? `allow-origin=${acao} 未包含 ${preflightOrigin}：在云函数「安全域名/跨域配置」里放行该域名，并让 CORS_ORIGIN 与之一致`
+        : "预检缺 access-control-allow-origin：OPTIONS 由网关应答（不进云函数），需在控制台云函数「安全域名/跨域配置」放行前端域名；GET 读取不受影响，仅写操作会被浏览器拦下",
   );
 }
 
