@@ -49,7 +49,9 @@ pnpm run pack
 BLOG_DATA_PROVIDER=unicloud-db
 ```
 
-只有一次性数据迁移需要 `SEED_TOKEN`（配在云函数环境变量上，见 [部署文档](deploy/unicloud/README.md)）。
+只有「B 路数据迁移」需要 `SEED_TOKEN`（配在云函数环境变量上，且**只能在 Web 控制台配**——
+CLI 与云函数目录里的 `.env` 都传不上去，实测）。不想碰控制台就走 A 路：用
+`init_data.json` + CLI `--initdatabase` 灌数据，见 [部署文档](deploy/unicloud/README.md)。
 
 ## 数据层架构
 
@@ -123,7 +125,11 @@ cd server && pnpm test    # 业务规则 + 传输解析（23 个用例，含内�
 ```bash
 pnpm run build:unicloud           # 产出 deploy/unicloud/cloudfunctions/mz-corner-api
 pnpm run deploy:unicloud          # 构建 + 同步产物 + 上传集合 Schema + CLI 上传 + 自检
-pnpm run migrate:unicloud -- --base <URL化地址> --token <SEED_TOKEN>   # 首次灌数据（幂等）
+
+# 首次灌数据（两条路，选一条；详见部署文档「步骤 4」）
+pnpm run migrate:unicloud -- --out /tmp/payload.json   # A: 不需要 SEED_TOKEN —— 生成初始化数据文件
+node scripts/export-init-data.mjs --in /tmp/payload.json   #    再执行 CLI --initdatabase 上传
+pnpm run migrate:unicloud -- --base <URL化地址> --token <SEED_TOKEN>   # B: 幂等，可重跑/清理
 ```
 
 云函数 `package.json` 的 `cloudfunction-config` 已声明 `runtime: Nodejs18`、`path: /mz-api`

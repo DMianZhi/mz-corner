@@ -164,7 +164,7 @@ pnpm run deploy:unicloud -- --skip-build  # 复用现有产物，只做上传 + 
 
 | 变量 | 必填 | 值 |
 |---|---|---|
-| `SEED_TOKEN` | 首次迁移必需 | 自定一个长随机串，用于一次性数据迁移（`/api/admin/seed`）；**不配则该路由关闭（回 403）** |
+| `SEED_TOKEN` | 仅「B 路迁移」需要 | 自定一个长随机串，用于一次性数据迁移（`/api/admin/seed`）；**不配则该路由关闭（回 404）** |
 | `CORS_ORIGIN` | 建议 | 静态站域名（不填为 `*`） |
 | `UNICLOUD_URL_PREFIX` | 改了前缀才需要 | URL 化前缀，默认 `/mz-api` |
 | `NITRO_BLOG_PROVIDER` | 否 | 数据源实现名，默认 `unicloud-db`；仅将来替换数据源时用 |
@@ -190,7 +190,48 @@ pnpm run deploy:unicloud -- --skip-build  # 复用现有产物，只做上传 + 
 ## 步骤 4：首次数据迁移（把多维表备份灌进云数据库）
 
 备份目录（**仓库外**，含 4 份 sheet JSON）默认取 `<local-path>/data/work/mz-corner-数据备份`，
-可用 `--from` 指定。脚本依次做：
+可用 `--from` 指定。两条路灌的是同一份备份，按「要不要 SEED_TOKEN」选：
+
+| | **A. 初始化数据文件**（已实测走通） | **B. seed 路由** |
+|---|---|---|
+| 前提 | 只要 CLI + 已关联服务空间 | 云函数环境变量 `SEED_TOKEN`（**只能在 Web 控制台配**） |
+| 命令 | `export:init-data` → `--initdatabase` | `migrate:unicloud --base … --token …` |
+| 幂等 | ❌ **追加插入**，重跑报 `_id` 重复 | ✅ `mode=replace` 先清空再写 |
+| 适合 | 首次灌数据 | 重跑、纠错、从备份恢复 |
+
+### 路 A：初始化数据文件（不需要 SEED_TOKEN）
+
+走 uniCloud 原生的 `表名.init_data.json` 机制，由 CLI 的 `--initdatabase` 上传，
+**全程不需要界面操作**。产物落在 `uniCloud-alipay/database/`（`uniCloud-*` 已在
+`.gitignore` 内，真实数据不入库）：
+
+```bash
+# 1. 转换备份 → 中间产物（不写库）
+pnpm run migrate:unicloud -- --out /tmp/payload.json
+
+# 2. 中间产物 → 初始化数据文件（顺带生成文章 _id，并把评论按标题关联到该 _id）
+node scripts/export-init-data.mjs --in /tmp/payload.json
+
+# 3. 上传（会一并上传 schema 与初始数据）
+"<local-path>/HBuilderX/cli.exe" cloud functions --initdatabase --prj mz-corner --provider alipay
+
+# 4. 验证
+node scripts/verify-unicloud-deploy.mjs
+```
+
+> **为什么要自己生成 `_id`**：初始化数据是「一次性写文件」，没法像 B 路那样先插文章、
+> 回读真实 id、再插评论。所以文章 id 由脚本按备份表顺序生成（`art-01`…，顺序稳定 ⇒
+> id 稳定），评论的 `articleId` 同步指向它。实测线上：`art-02` 挂 1 条、`art-05` 挂 4 条，
+> 关联全部有效。
+>
+> **坑：`--initdatabase` 是「插入」不是「同步」**——它不清理集合。重跑会撞
+> `duplicate key error collection: articles index: _id_ dup key`（实测：第二次执行时
+> articles 整批 `nInserted=0` 失败，其余集合也未被处理）。所以**改数据 / 删数据只能走
+> B 路（`mode=replace`）或 Web 控制台**；A 路适合「空库首次灌入」。
+
+### 路 B：seed 路由（可重跑、可清理）
+
+脚本依次做：
 
 1. 解析每份的 `records[].fields`（**是 JSON 字符串，需二次解析**）
 2. 字段归一：`标题→title`、`标签→tags`（拆逗号）、`发布时间→publishDate`（转 `YYYY-MM-DD`）、`已发布→published`
