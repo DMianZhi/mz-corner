@@ -18,7 +18,8 @@
     "check:types": "run-p check:types:client check:types:server",
     "check:types:client": "pnpm --filter @wps365-open/boilerplate-client check:types",
     "check:types:server": "pnpm --filter @wps365-open/boilerplate-server check:types",
-    "build:unicloud": "node scripts/build-unicloud.mjs"
+    "build:unicloud": "node scripts/build-unicloud.mjs",
+    "prepare:unicloud": "node scripts/prepare-unicloud-project.mjs"
   },
   "devDependencies": {
     "archiver": "^7.0.1",
