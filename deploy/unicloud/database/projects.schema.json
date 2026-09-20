@@ -1,0 +1,57 @@
+{
+  "bsonType": "object",
+  "required": ["name"],
+  "permission": {
+    "read": false,
+    "create": false,
+    "update": false,
+    "delete": false
+  },
+  "properties": {
+    "_id": {
+      "description": "系统自动生成"
+    },
+    "name": {
+      "bsonType": "string",
+      "title": "项目名称",
+      "trim": "both"
+    },
+    "tagline": {
+      "bsonType": "string",
+      "title": "一句话简介"
+    },
+    "description": {
+      "bsonType": "string",
+      "title": "详细描述"
+    },
+    "tech": {
+      "bsonType": "array",
+      "title": "技术栈",
+      "arrayType": "string"
+    },
+    "link": {
+      "bsonType": "string",
+      "title": "链接"
+    },
+    "color": {
+      "bsonType": "string",
+      "title": "标志色（#RRGGBB）",
+      "defaultValue": "#4D6BFE"
+    },
+    "symbol": {
+      "bsonType": "string",
+      "title": "符号",
+      "defaultValue": "📦"
+    },
+    "order": {
+      "bsonType": "number",
+      "title": "排序（小的在前）",
+      "defaultValue": 0
+    },
+    "status": {
+      "bsonType": "string",
+      "title": "状态",
+      "defaultValue": "live"
+    }
+  }
+}

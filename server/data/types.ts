@@ -6,6 +6,14 @@
  * 更换数据源 = 新写一个实现 BlogRepository 的 provider，无需改动上层。
  */
 
+/**
+ * 文章发布状态。
+ *
+ * 领域语义值即存库值（published / draft），不再沿用多维表时代的「已发布 / 草稿」——
+ * 读取时会做一次兼容归一（见 providers/unicloud-db/mappers.ts），因此历史数据不会丢。
+ */
+export type ArticleStatus = "published" | "draft";
+
 export interface Article {
   id: string;
   title: string;
@@ -15,7 +23,7 @@ export interface Article {
   publishDate: string;
   summary: string;
   viewCount: number;
-  status: string;
+  status: ArticleStatus;
 }
 
 export interface Comment {

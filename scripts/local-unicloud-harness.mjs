@@ -29,6 +29,7 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { installFakeUnicloudDatabase } from "./fake-unicloud-db.mjs";
 
 const require = createRequire(import.meta.url);
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -41,6 +42,10 @@ const inPlace = args.includes("--in-place");
 const positional = args.filter((a) => !a.startsWith("--"));
 const mode = positional[0] === "full" ? "full" : "stripped";
 const port = Number(positional[1] || 8899);
+
+// 数据层读的是云函数运行时注入的全局 uniCloud，本地没有——先装上内存假库，
+// 否则任何读数据的路由都会 500（而不是「返回空列表」，这是刻意的：见 client.ts）。
+const fakeDatabase = installFakeUnicloudDatabase();
 
 const { cloudFunction, entry } = await loadCloudFunction();
 
@@ -85,9 +90,25 @@ const server = http.createServer(async (req, res) => {
   res.end(result.body);
 });
 
+// 端口占用是最容易踩的坑（上一次的模拟器进程不会自己退出），给一条能直接照做的提示
+server.on("error", (error) => {
+  if (error?.code === "EADDRINUSE") {
+    console.error(`端口 ${port} 已被占用：可能上一次的模拟器还在运行。先结束它，或换端口重跑（如 8900）`);
+    process.exit(1);
+  }
+  throw error;
+});
+
 server.listen(port, () => {
   console.log(`本地 uniCloud 模拟器已启动：http://127.0.0.1:${port}${PREFIX}`);
   console.log(`event.path 形态：${mode === "full" ? "含前缀" : "已剥离"}`);
   console.log(`适配层：${entry}${inPlace ? "（就地加载，未隔离）" : "（已隔离到仓库外临时目录）"}`);
+  console.log(
+    `假数据库：已注入 globalThis.uniCloud（集合 ${fakeDatabase.names().join(", ")}；` +
+      `文章 ${fakeDatabase.count("articles")} 条，含 1 条草稿、1 条历史中文状态值）`,
+  );
+  // seed 端点需要 SEED_TOKEN 才启用（未设置时返回 404），启动时说明清楚，
+  // 免得把「功能关闭」误读成「路由没注册」
+  console.log(`seed 端点：${process.env.SEED_TOKEN ? "已启用（SEED_TOKEN 已设置）" : "关闭（未设置 SEED_TOKEN）"}`);
   console.log(`自检：node scripts/verify-unicloud-deploy.mjs http://127.0.0.1:${port}${PREFIX}`);
 });

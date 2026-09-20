@@ -6,134 +6,28 @@
  *   云函数 / 测试可自行调用 configureDataSource）。
  * - 未注入时回退到环境变量，使数据层可脱离宿主独立运行（测试、独立脚本）。
  *
+ * 接入 uniCloud 云数据库后，数据源**不再需要任何凭据**：数据库句柄由云函数运行时
+ * 注入（见 providers/unicloud-db/client.ts），这里只剩「用哪个 provider」一个开关。
+ *
  * Nitro 侧请勿在业务代码里读 process.env（平台同进程可能托管多个项目），
  * 统一走 `plugins/data-source.ts` 注入。
  */
 
-export type WpsTransportKind = "cli" | "http";
-
-export interface WpsDataSourceConfig {
-  /** 博客多维表文档 ID */
-  fileId?: string;
-  /** 传输方式：cli 子进程 或 http 直连工具网关 */
-  transport?: WpsTransportKind;
-  /** CLI 可执行文件名（transport=cli） */
-  cliBin?: string;
-  /** 工具网关地址（transport=http） */
-  endpoint?: string;
-  /** 工具网关访问令牌（transport=http） */
-  apiToken?: string;
-  requestSourceEnc?: string;
-  clientId?: string;
-  cliVersion?: string;
-}
-
-export interface Wps365DataSourceConfig {
-  /** Open API 基地址（默认 https://<endpoint>） */
-  baseUrl?: string;
-  /** 开放平台应用 client_id */
-  clientId?: string;
-  /** 开放平台应用 client_secret */
-  clientSecret?: string;
-  /** 委托模式的 refresh_token（长期有效，云函数靠它换 access_token） */
-  refreshToken?: string;
-  /** 直接给定 access_token（排障用，跳过刷新） */
-  accessToken?: string;
-}
-
 export interface DataSourceConfig {
   /** 数据源实现名，对应 data/index.ts 注册表 */
   provider?: string;
-  wps?: WpsDataSourceConfig;
-  wps365?: Wps365DataSourceConfig;
 }
 
 let injected: DataSourceConfig = {};
 
 /** 注入数据源配置（宿主启动时调用一次） */
 export function configureDataSource(config: DataSourceConfig): void {
-  injected = {
-    ...injected,
-    ...config,
-    wps: { ...injected.wps, ...config.wps },
-    wps365: { ...injected.wps365, ...config.wps365 },
-  };
+  injected = { ...injected, ...config };
 }
 
-/**
- * 当前生效的数据源实现名。
- *
- * 默认 wps365：金山文档 AI 技能渠道（wps）实测仅支持 WPS 个人账号，
- * 企业账号会返回 403 enterprise account not supported。
- * 个人账号可显式设 BLOG_DATA_PROVIDER=wps 走工具网关。
- */
+/** 当前生效的数据源实现名（注入值 → 环境变量 → 默认 unicloud-db） */
 export function dataSourceProviderName(): string {
-  return (injected.provider || process.env.BLOG_DATA_PROVIDER || "wps365").toLowerCase();
-}
-
-export interface ResolvedWpsConfig {
-  fileId: string;
-  transport: WpsTransportKind;
-  cliBin: string;
-  endpoint: string;
-  apiToken: string;
-  requestSourceEnc: string;
-  clientId: string;
-  cliVersion: string;
-}
-
-const WPS_DEFAULTS = {
-  fileId: "<dbsheet-file-id>",
-  transport: "cli" as WpsTransportKind,
-  cliBin: "kdocs-comate-cli",
-  endpoint: "https://<endpoint>/skill_hub/api/v1/tool",
-} as const;
-
-export interface ResolvedWps365Config {
-  baseUrl: string;
-  clientId: string;
-  clientSecret: string;
-  refreshToken: string;
-  accessToken: string;
-}
-
-const WPS365_DEFAULTS = {
-  baseUrl: "https://<endpoint>",
-} as const;
-
-/**
- * 解析 WPS 365 数据源配置：注入值 → 环境变量 → 默认值。
- * 环境变量仅作为无宿主场景的回退，不用于 Nitro 运行期。
- */
-export function resolveWps365Config(): ResolvedWps365Config {
-  const wps365 = injected.wps365 ?? {};
-  return {
-    baseUrl: wps365.baseUrl || process.env.WPS365_BASE_URL || WPS365_DEFAULTS.baseUrl,
-    clientId: wps365.clientId || process.env.WPS365_CLIENT_ID || "",
-    clientSecret: wps365.clientSecret || process.env.WPS365_CLIENT_SECRET || "",
-    refreshToken: wps365.refreshToken || process.env.WPS365_REFRESH_TOKEN || "",
-    accessToken: wps365.accessToken || process.env.WPS365_ACCESS_TOKEN || "",
-  };
-}
-
-/**
- * 解析 WPS 数据源配置：注入值 → 环境变量 → 默认值。
- * 环境变量仅作为无宿主场景的回退，不用于 Nitro 运行期。
- */
-export function resolveWpsConfig(): ResolvedWpsConfig {
-  const wps = injected.wps ?? {};
-  const transport = (wps.transport || process.env.WPS_TRANSPORT || WPS_DEFAULTS.transport).toLowerCase();
-
-  return {
-    fileId: wps.fileId || process.env.WPS_BLOG_FILE_ID || WPS_DEFAULTS.fileId,
-    transport: transport === "http" ? "http" : "cli",
-    cliBin: wps.cliBin || process.env.WPS_CLI_BIN || WPS_DEFAULTS.cliBin,
-    endpoint: wps.endpoint || process.env.WPS_TOOL_ENDPOINT || WPS_DEFAULTS.endpoint,
-    apiToken: wps.apiToken || process.env.WPS_API_TOKEN || "",
-    requestSourceEnc: wps.requestSourceEnc || process.env.WPS_REQUEST_SOURCE_ENC || "",
-    clientId: wps.clientId || process.env.WPS_CLIENT_ID || "",
-    cliVersion: wps.cliVersion || process.env.WPS_CLI_VERSION || "",
-  };
+  return (injected.provider || process.env.BLOG_DATA_PROVIDER || "unicloud-db").toLowerCase();
 }
 
 /** 仅供测试：清空注入的配置 */

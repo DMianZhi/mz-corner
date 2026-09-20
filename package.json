@@ -22,6 +22,7 @@
     "prepare:unicloud": "node scripts/prepare-unicloud-project.mjs",
     "deploy:unicloud": "node scripts/deploy-unicloud.mjs",
     "harness:unicloud": "node scripts/local-unicloud-harness.mjs",
+  "migrate:unicloud": "node scripts/migrate-from-dbsheet.mjs",
     "verify:unicloud": "node scripts/verify-unicloud-deploy.mjs"
   },
   "devDependencies": {

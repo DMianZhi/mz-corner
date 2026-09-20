@@ -1,6 +1,6 @@
 import type { Article, Comment, ArticleListItem, PaginatedData, ArchiveData, Project, SiteConfig } from '@/types/blog';
 
-// 通过 Nitro 后端 /api/blog/* 访问 WPS 多维表（后端调用 kdocs CLI 或工具网关）
+// 通过 Nitro 后端 /api/blog/* 访问博客数据（后端查 uniCloud 云数据库）
 // 同源部署（单进程 / Nginx 反代）留空即可；静态托管 + 云函数分离时用 VITE_API_BASE 指向函数地址
 const API_ORIGIN = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/+$/, '');
 const BASE = API_ORIGIN ? `${API_ORIGIN}/api/blog` : './api/blog';
@@ -157,7 +157,7 @@ export async function getProjects(): Promise<Project[]> {
 
 export { toTs };
 
-/** 站点配置（多维表动态管理） */
+/** 站点配置（site_config 集合动态管理） */
 export async function getSiteConfig(): Promise<SiteConfig> {
   return apiGet<SiteConfig>(`${BASE}/config`);
 }

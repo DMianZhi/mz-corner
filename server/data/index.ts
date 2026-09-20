@@ -1,15 +1,14 @@
 /**
  * 数据仓储入口：provider 注册表 + 工厂。
  *
- * 上层只调用 getBlogRepository()，具体用哪个服务商由 BLOG_DATA_PROVIDER 决定。
- * 接入新服务商只需两步：
+ * 上层只调用 getBlogRepository()，具体用哪个实现由 BLOG_DATA_PROVIDER 决定。
+ * 接入新数据源只需两步：
  *   1. 在 data/providers/<name>/ 实现 BlogRepository 接口
  *   2. registerBlogProvider('<name>', () => new XxxRepository())
  * 无需改动 service / route 任何代码。
  */
 import { dataSourceProviderName } from "./config";
-import { WpsBlogRepository } from "./providers/wps";
-import { Wps365BlogRepository } from "./providers/wps365";
+import { UnicloudDbBlogRepository } from "./providers/unicloud-db";
 import type { BlogRepository } from "./types";
 
 export type BlogRepositoryFactory = () => BlogRepository;
@@ -26,16 +25,13 @@ export function listBlogProviders(): string[] {
   return [...registry.keys()];
 }
 
-/** 当前生效的数据源名称（注入值 → 环境变量 → 默认 wps365） */
+/** 当前生效的数据源名称（注入值 → 环境变量 → 默认 unicloud-db） */
 export function activeBlogProviderName(): string {
   return dataSourceProviderName();
 }
 
-// 内置实现：WPS 多维表
-// - wps365：WPS 365 Open API（企业账号可用，纯 HTTP）
-// - wps：金山文档 AI 技能工具网关（仅个人账号）
-registerBlogProvider("wps365", () => new Wps365BlogRepository());
-registerBlogProvider("wps", () => new WpsBlogRepository());
+// 内置实现：uniCloud 云数据库（与博客同服务空间，无需凭据，云函数运行时注入句柄）
+registerBlogProvider("unicloud-db", () => new UnicloudDbBlogRepository());
 
 let cached: BlogRepository | undefined;
 let cachedName = "";
@@ -64,3 +60,12 @@ export function resetBlogRepository(): void {
 }
 
 export * from "./types";
+export { COLLECTIONS, LIMITS } from "./providers/unicloud-db/collections";
+export { clearCollection, countDocuments, insertDocuments } from "./providers/unicloud-db/admin";
+export {
+  getDatabase,
+  isDatabaseAvailable,
+  setUniCloudDatabase,
+  resetUniCloudDatabase,
+  type UniCloudDatabase,
+} from "./providers/unicloud-db/client";

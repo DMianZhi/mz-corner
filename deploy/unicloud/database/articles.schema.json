@@ -1,0 +1,53 @@
+{
+  "bsonType": "object",
+  "required": ["title"],
+  "permission": {
+    "read": false,
+    "create": false,
+    "update": false,
+    "delete": false
+  },
+  "properties": {
+    "_id": {
+      "description": "系统自动生成"
+    },
+    "title": {
+      "bsonType": "string",
+      "title": "标题",
+      "trim": "both"
+    },
+    "content": {
+      "bsonType": "string",
+      "title": "正文（Markdown）"
+    },
+    "category": {
+      "bsonType": "string",
+      "title": "分类",
+      "defaultValue": "未分类"
+    },
+    "tags": {
+      "bsonType": "array",
+      "title": "标签",
+      "arrayType": "string"
+    },
+    "publishDate": {
+      "bsonType": "string",
+      "title": "发布日期（YYYY-MM-DD）"
+    },
+    "summary": {
+      "bsonType": "string",
+      "title": "摘要"
+    },
+    "viewCount": {
+      "bsonType": "number",
+      "title": "阅读数",
+      "defaultValue": 0
+    },
+    "status": {
+      "bsonType": "string",
+      "title": "状态",
+      "enum": ["published", "draft"],
+      "defaultValue": "draft"
+    }
+  }
+}

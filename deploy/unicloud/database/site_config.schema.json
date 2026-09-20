@@ -1,0 +1,32 @@
+{
+  "bsonType": "object",
+  "required": ["key"],
+  "permission": {
+    "read": false,
+    "create": false,
+    "update": false,
+    "delete": false
+  },
+  "properties": {
+    "_id": {
+      "description": "系统自动生成"
+    },
+    "key": {
+      "bsonType": "string",
+      "title": "配置键",
+      "trim": "both"
+    },
+    "value": {
+      "bsonType": "string",
+      "title": "配置值"
+    },
+    "group": {
+      "bsonType": "string",
+      "title": "分组（仅备注用）"
+    },
+    "description": {
+      "bsonType": "string",
+      "title": "说明（仅备注用）"
+    }
+  }
+}

@@ -22,12 +22,17 @@ if (!PROVIDERS.has(provider)) {
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const source = path.join(root, "deploy/unicloud/cloudfunctions/mz-corner-api");
+const databaseSource = path.join(root, "deploy/unicloud/database");
 const projectDir = path.join(root, `uniCloud-${provider}`);
 const target = path.join(projectDir, "cloudfunctions/mz-corner-api");
+const databaseTarget = path.join(projectDir, "database");
 
 await rm(projectDir, { recursive: true, force: true });
 await mkdir(path.dirname(target), { recursive: true });
 await cp(source, target, { recursive: true });
+// 集合 Schema 一并带上：deploy:unicloud 会用它自动建集合，不需要在控制台手点
+await mkdir(databaseTarget, { recursive: true });
+await cp(databaseSource, databaseTarget, { recursive: true });
 
 await writeFile(
   path.join(projectDir, "README.md"),
@@ -55,22 +60,30 @@ pnpm run deploy:unicloud -- --provider ${provider}
 2. 右键 \`cloudfunctions/mz-corner-api\` → **上传部署**
    （若提示未关联服务空间，先右键 \`uniCloud-${provider}\` → 关联云服务空间或项目）
 
+## 数据库集合
+
+\`database/*.schema.json\` 会被 \`pnpm run deploy:unicloud\` 自动上传（等价于在控制台手动建集合）：
+\`articles\` / \`comments\` / \`projects\` / \`site_config\`。
+Schema 里权限一律 \`false\`——只有云函数（服务空间身份）能读写，前端拿不到直连权限。
+
 ## 部署后仍必须在 Web 控制台做的两件事
 
 1. 控制台 → 云函数 → \`mz-corner-api\` → 环境变量，添加：
    | 变量 | 值 |
    |---|---|
-   | \`WPS_TRANSPORT\` | \`http\` |
-   | \`WPS_API_TOKEN\` | 工具网关令牌 |
-   | \`WPS_REQUEST_SOURCE_ENC\` | 请求签名 |
-   | \`WPS_CLIENT_ID\` | 客户端 ID |
+   | \`SEED_TOKEN\` | 自定一个长随机串（一次性数据迁移用；不配则 \`/api/admin/seed\` 关闭） |
    | \`CORS_ORIGIN\` | 静态站域名（可选，默认 \`*\`） |
 
-   \`WPS_TRANSPORT\` 必须为 \`http\`：云函数里没有 \`/bin/sh\` 也没有 CLI 二进制。
-   令牌失效时接口返回 500 + \`code=401 Unauthorized\`（不会静默返回空列表）。
+   数据源是**同服务空间的云数据库**，不需要任何第三方凭据。
 
 2. 控制台 → 云函数 → \`mz-corner-api\` → **URL 化**，设置路径前缀
-3. 前端构建时指向该地址：
+3. 首次部署后灌数据（本地那份多维表备份 → 云数据库）：
+
+   \`\`\`bash
+   pnpm run migrate:unicloud -- --base https://<spaceId>.../mz-api --token <SEED_TOKEN>
+   \`\`\`
+
+4. 前端构建时指向该地址：
 
    \`\`\`bash
    cd client

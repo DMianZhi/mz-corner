@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import type { SiteConfig } from '@/types/blog';
 import { getSiteConfig } from '@/services/blog-api';
 
-/** 默认配置：多维表不可用时的兜底（与后端 DEFAULT_CONFIG 一致） */
+/** 默认配置：接口不可用时的兜底（与后端 DEFAULT_CONFIG 一致） */
 const FALLBACK: SiteConfig = {
   name: '敏智',
   nameEn: 'MIN ZHI',
@@ -29,7 +29,7 @@ export function ConfigProvider({ children }: { children: ReactNode }) {
     let alive = true;
     getSiteConfig()
       .then((c) => { if (alive && c?.name) setConfig(c); })
-      .catch(() => {/* 多维表不可用时保持兜底 */});
+      .catch(() => {/* 接口不可用时保持兜底 */});
     return () => { alive = false; };
   }, []);
 

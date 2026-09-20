@@ -1,18 +1,30 @@
-# uniCloud 部署指南（方案 B）
+# uniCloud 部署指南
 
-静态前端走 **前端网页托管**（CDN + HTTPS），数据接口走 **云函数**（Nitro 产物 + 适配层）。
-数据仍存放在 WPS 多维表，浏览器只与本项目的 API 通信。
+静态前端走 **前端网页托管**（CDN + HTTPS），数据接口走 **云函数**（Nitro 产物 + 适配层），
+数据存在**同一个服务空间的云数据库**里。浏览器只与本项目的 API 通信。
 
 ```
 浏览器
  ├── 静态资源 ──→ uniCloud 前端网页托管（client/dist）
- └── /api/blog/* ──→ 云函数 mz-corner-api（Nitro handler）──→ WPS 工具网关 ──→ 多维表
+ └── /api/blog/* ──→ 云函数 mz-corner-api（Nitro handler）──→ uniCloud 云数据库
 ```
 
-## 为什么不用 CLI 二进制
+## 为什么数据放在云数据库（结论，别反复试）
 
-沙箱内的 `kdocs-comate-cli` 无法在云函数里执行，因此云函数使用 `WPS_TRANSPORT=http`，
-直连工具网关（与 CLI 调用的是同一套接口，已在沙箱内实测读写全通）。
+原方案用 WPS 多维表当存储，实测三条路都堵死：
+
+- **技能渠道**：`POST https://api.wps.cn/office/v5/ai/skill_hub/token/create` 对企业账号直接回
+  `{"code":403,"message":"enterprise account not supported"}`；网关带企业 cookie 直连回 `403001`，
+  原文「企业用户请使用 WPS365 CLI」。**企业账号拿不到令牌**。
+- **个人账号能签发，但令牌与会话同生共死**：`expires_in` 看似一年（31535956 秒），实际
+  `wps_sid` 会话一断，令牌立刻 `401`，再调 `token/create` 得 `HTTP 401 {"code":200,"msg":"no login"}`。
+  **不能当服务器端长期凭据**。跨账号读企业表另有一道墙：`{"code":400100,"message":"第三方服务错误：无权限"}`。
+- **WPS365 开放平台**：官方 CLI 实测能读到企业表（数据链路是通的），但本地绑定的应用
+  `auth refresh --delegated` 回 `40100009 invalid_grant: refresh token not_found`、`auth status` 显示
+  `app: not_found`——应用已在服务端不存在，需重建。
+
+云数据库没有上述任何一道墙：**同服务空间、无第三方凭据、权限由云函数运行身份决定**，
+且每个开发者账号的免费服务空间（阿里云 / 支付宝云各一个）本就包含数据库额度。
 
 ## 前置条件
 
@@ -20,9 +32,11 @@
   - 支付宝云默认运行时就是 **Nodejs18**（云函数用到全局 `fetch`，需 Node 18+）
   - 单个云函数体积上限 **10MB**（含 `node_modules`），本项目产物约 1.6MB
   - 支付宝云/阿里云**不支持相对路径读文件**（`fs.readFileSync('./x')`），本项目已用绝对路径，不受影响
-- 工具网关令牌三件套：`WPS_API_TOKEN`、`WPS_REQUEST_SOURCE_ENC`、`WPS_CLIENT_ID`
-  - 令牌入口：<https://<endpoint>/kdocs-auth/auth-guide>
-- 多维表 `file_id`（默认已在 `server/data/config.ts` 中，换文档时用 `WPS_BLOG_FILE_ID` 覆盖）
+- 4 个数据库集合：`articles` / `comments` / `projects` / `site_config`
+  - 由 `deploy/unicloud/database/*.schema.json` 定义，`pnpm run deploy:unicloud` 会**自动上传建集合**，
+    不需要在控制台手点
+  - Schema 里权限一律 `false`：只有云函数（服务空间身份）能读写，前端拿不到直连权限
+  - 云数据库是 JSON 文档型、兼容 MongoDB 协议，字段名即领域模型（`title` / `content` / `viewCount`…）
 
 ## 步骤 1：构建云函数产物
 
@@ -71,11 +85,12 @@ pnpm run deploy:unicloud -- --skip-build  # 复用现有产物，只做上传 + 
 
 脚本 `scripts/deploy-unicloud.mjs` 依次做：`build:unicloud`（含自包含检查）
 → 同步产物到 `uniCloud-alipay/cloudfunctions/mz-corner-api/`
-→ 调 HBuilderX 自带 cli 上传（`--force` 覆盖）
+→ 同步并上传 `database/*.schema.json`（建集合；放在云函数之前，避免新函数上线时集合还不存在）
+→ 调 HBuilderX 自带 cli 上传云函数（`--force` 覆盖）
 → 从服务空间 id 推导 URL 化地址并跑 `verify-unicloud-deploy.mjs`。
 
 常用参数：`--provider alipay|aliyun|tcb`、`--prj <HBuilderX 项目名>`、`--cli <cli 路径>`、
-`--url <自检地址>`、`--skip-verify`。cli 路径可用 `--cli` 或环境变量 `HBX_CLI` 指定
+`--url <自检地址>`、`--skip-db`（跳过建集合）、`--skip-verify`。cli 路径可用 `--cli` 或环境变量 `HBX_CLI` 指定
 （Windows 默认 `C:\Users\<你>\HBuilderX\cli.exe`，macOS `/Applications/HBuilderX.app/Contents/MacOS/cli`）。
 
 不想用脚本时，裸命令等价：
@@ -146,67 +161,53 @@ pnpm run deploy:unicloud -- --skip-build  # 复用现有产物，只做上传 + 
 ## 步骤 3：配置云函数环境变量
 
 在 uniCloud 控制台 → 云函数 → `mz-corner-api` → 环境变量。
-**先确定用哪个数据源通道**，两者需要的变量完全不同：
 
-| 通道 | 适用 | 必填变量 |
+| 变量 | 必填 | 值 |
 |---|---|---|
-| `wps365`（当前默认） | 企业账号（技能渠道 `wps` 对企业账号返回 403） | `WPS365_CLIENT_ID`、`WPS365_CLIENT_SECRET`、`WPS365_REFRESH_TOKEN`（排障可用 `WPS365_ACCESS_TOKEN` 直接给 access_token） |
-| `wps` | **仅个人 WPS 账号**，走工具网关 | `WPS_TRANSPORT=http`、`WPS_API_TOKEN`、`WPS_REQUEST_SOURCE_ENC`、`WPS_CLIENT_ID` |
+| `SEED_TOKEN` | 首次迁移必需 | 自定一个长随机串，用于一次性数据迁移（`/api/admin/seed`）；**不配则该路由关闭（回 403）** |
+| `CORS_ORIGIN` | 建议 | 静态站域名（不填为 `*`） |
+| `UNICLOUD_URL_PREFIX` | 改了前缀才需要 | URL 化前缀，默认 `/mz-api` |
+| `NITRO_BLOG_PROVIDER` | 否 | 数据源实现名，默认 `unicloud-db`；仅将来替换数据源时用 |
 
-> **为什么默认 `wps365`（实测结论，别反复踩）**：工具网关的令牌签发端点
-> `POST https://api.wps.cn/office/v5/ai/skill_hub/token/create`（`Cookie: wps_sid=<WPS_SID>`）
-> 对企业账号直接返回 `{"code":403,"message":"enterprise account not supported"}`；
-> 浏览器侧 auth-guide 的 `authorization/check` 对同一状态也只回 `strategy: "enterprise_denied"`。
-> 即：**企业账号既拿不到 `WPS_API_TOKEN`，也就配不出 `wps` 通道**。
-> 连带影响：README 里「云主机 + `WPS_SID` + `cli`」的方案 A 对当前账号同样不通——
-> CLI 续签走的也是这个端点（实测现有密钥链令牌已失效，调用返回 401，续签即撞 403）。
->
-> **个人账号能签发，但令牌是「会话绑定」的——这条路不能用于服务器端（实测，决定性）**：
-> `POST https://api.wps.cn/office/v5/ai/skill_hub/token/create`，`Cookie: wps_sid=<个人账号 sid>`
-> → `{"code":200,"data":{"token":"...","expires_in":31535956}}`。
-> `expires_in` 看着是一年，**但实际寿命跟 sid 会话同生共死**：签发后确实能用
->（实测列云盘、建多维表都成功），可一旦个人 `wps_sid` 会话结束，
-> 同一令牌立刻回 `401 Unauthorized`，此时再调 `token/create` 得到
-> `HTTP 401 {"code":200,"msg":"no login"}`，而 `365.kdocs.cn` 也回 `{"result":"userNotLogin"}`。
-> ⇒ **不要把 `WPS_API_TOKEN` 当成长期凭据部署**；浏览器会话一断，线上就 500。
-> 另外网关用 `Cookie: wps_sid=<企业账号>` 直接请求会回 `403001`，原文：
-> 「当前登录账号为 WPS 企业账号，当前产品暂仅支持个人账号使用……企业用户请使用 WPS365 CLI」。
-> 拿个人账号读企业账号名下的表另有一道权限墙：`{"code":400100,"message":"第三方服务错误：无权限"}`。
->
-> **企业账号的正确工具是官方 WPS365 CLI**（`github.com/wps365-open/cli`，MIT，Go 二进制）：
-> `irm https://open-docs.wpscdn.cn/cli/install.ps1 | iex`，或直接取 CDN 上的
-> `releases/download/v0.3.6/wps365-cli-x86_64-pc-windows-gnu.zip` 解压即用。
-> `config init`（浏览器建/绑应用）→ `auth login --device`（设备码授权）→ `user me` 验证。
-> 实测它能**直接读到企业多维表**（`dbsheet records list <file-id> <sheet-id> --page-size 200 --max-records 500 --show-fields-info -o json`），
-> 即 `wps365` 通道的数据链路本身是通的，缺的只是可长期刷新的应用凭据。
-> 注意 `--dry-run` 对 `auth refresh` 无效（照样发真实请求）。
+数据源是**同服务空间的云数据库**，不需要任何第三方凭据，也没有会过期的令牌。
 
-两个通道都可能用到的：
-
-| 变量 | 值 |
-|---|---|
-| `CORS_ORIGIN` | 静态站域名（不填为 `*`） |
-| `UNICLOUD_URL_PREFIX` | URL 化前缀，默认 `/mz-api`（改了控制台前缀才需要设） |
-| `NITRO_BLOG_PROVIDER` | `wps365` / `wps`，运行期切换数据源通道 |
-
-> **两种变量名都能生效（已对构建产物实测）**：
-> ① 数据层自己的名字（`WPS_*` / `WPS365_*`）——`server/data/config.ts` 在运行期读 `process.env`；
-> ② Nitro runtimeConfig 覆盖名——`NITRO_BLOG_` + 路径（大写下划线），如 `NITRO_BLOG_PROVIDER`、
-> `NITRO_BLOG_WPS_TRANSPORT`、`NITRO_BLOG_WPS365_CLIENT_ID`。
+> **为什么覆盖 `provider` 要用 `NITRO_` 前缀**：`nitro.config.ts` 里 `runtimeConfig` 的默认值会被
+> **构建期内联进产物**，运行期改普通环境变量对它无效；要覆盖必须用 `NITRO_` + 路径（大写下划线），
+> 如 `NITRO_BLOG_PROVIDER=...`。数据层自己读的变量（`BLOG_DATA_PROVIDER`）只在「未经宿主注入」时兜底
+> （测试、独立脚本）。
 >
-> 之所以要留 ②：`nitro.config.ts` 的 `runtimeConfig` 默认值会被**构建期内联进产物**，
-> 运行期再改普通环境变量不会影响 `provider` 这类已内联字段，只有 `NITRO_*` 才能覆盖。
-> 实测：`NITRO_BLOG_PROVIDER=wps` → 日志变 `provider=wps`；
-> 普通 `WPS_TRANSPORT=http` + 占位令牌 → 报 `WPS 工具调用失败: code=401 Unauthorized`（链路已通，只差真令牌）。
->
-> 用 `wps` 通道时切忌把 `WPS_TRANSPORT` 留空或写成 `cli`：云函数里既没有 `/bin/sh` 也没有
-> CLI 二进制，所有 `/api/blog/*` 会直接 500（日志里是 `spawn /bin/sh ENOENT`）。
->
-> **怎么确认线上实际用的是哪个通道**：云函数日志里那行
-> `Data source plugin initialized (provider=..., transport=...)`。
+> **怎么确认线上实际用的是哪个数据源**：云函数日志里那行
+> `Data source plugin initialized (provider=..., db=ready|unavailable)`。
 > 配了变量却不见效时，先看这行，再看具体报错。
 
-## 步骤 4：配置云函数 URL 化（必须手动，在 Web 控制台）
+## 步骤 4：首次数据迁移（把多维表备份灌进云数据库）
+
+备份目录（**仓库外**，含 4 份 sheet JSON）默认取 `<local-path>/data/work/mz-corner-数据备份`，
+可用 `--from` 指定。脚本依次做：
+
+1. 解析每份的 `records[].fields`（**是 JSON 字符串，需二次解析**）
+2. 字段归一：`标题→title`、`标签→tags`（拆逗号）、`发布时间→publishDate`（转 `YYYY-MM-DD`）、`已发布→published`
+3. 写入文章 / 项目 / 配置 → 回读文章列表建立「标题 → 新 `_id`」→ 据此解析评论归属 → 写入评论
+4. 逐篇回读评论数，确认关联生效
+
+```bash
+# 只转换，产出可检查的 JSON（不写库）
+pnpm run migrate:unicloud -- --out ./migrated.json
+
+# 真实迁移
+pnpm run migrate:unicloud --   --base https://<unicloud-space-id>.dev-hz.cloudbasefunction.cn/mz-api   --token <SEED_TOKEN>
+```
+
+> **评论归属为什么要重算**：原表「文章ID」列是 `MultiLineText` 手填文本（值为 `d` / `e` / `f`），
+> 与文章记录 id（`8` / `9` / `-` / `_` / `BA`…）**本就对不上**，是无效关联。
+> 脚本按评论内容判定归属（「TypeScript 很实用！」→《TypeScript 5.0 最佳实践》、
+> 「年终总结很真实」→《我的 2024 年终总结》），判不出来的落到最早发布的文章，
+> 并把原值写进 `legacyArticleId` 便于人工纠正。迁移时会打印这张映射表。
+
+> 迁移**幂等**：`mode=replace` 先清空对应集合再写入，重跑不会产生重复数据。
+> 请求体约 108KB（23 篇文章全文），远低于支付宝云 32MB 的 Body 上限。
+
+## 步骤 5：配置云函数 URL 化（必须手动，在 Web 控制台）
 
 > ⚠️ 实测确认：`cloudfunction-config.path` **不会**替你配 URL 化路由。
 > 云函数上传成功（控制台日志「上传完成」）后，网关仍报 `50002 函数请求不合法 / 函数路由未配置`。
@@ -245,7 +246,7 @@ https://<unicloud-space-id>.dev-hz.cloudbasefunction.cn/mz-api
 > 支付宝云限制（官方文档）：请求与响应 Body 上限均为 32MB；
 > 默认域名存在**全空间共享**的限流池，正式用建议绑自定义域名。
 
-## 步骤 5：构建并上传前端
+## 步骤 6：构建并上传前端
 
 ```bash
 cd client
@@ -262,7 +263,7 @@ VITE_API_BASE=https://<unicloud-space-id>.dev-hz.cloudbasefunction.cn/mz-api pnp
 
 > 若把前端也部署在同一台服务器/同源路径下，`VITE_API_BASE` 留空即可（默认相对路径 `./api/blog`）。
 
-## 步骤 6：配置安全域名（跨域）
+## 步骤 7：配置安全域名（跨域）
 
 静态托管与云函数不同源，除了适配层内置的 CORS 响应头，uniCloud 还要求在控制台放行来源：
 
@@ -271,7 +272,7 @@ VITE_API_BASE=https://<unicloud-space-id>.dev-hz.cloudbasefunction.cn/mz-api pnp
 未配置时浏览器会拦请求（适配层已短路处理 OPTIONS 预检，但正式请求仍会被网关拦下）。
 同时建议把云函数环境变量 `CORS_ORIGIN` 设为该域名（不设则为 `*`）。
 
-## 步骤 7：验证
+## 步骤 8：验证
 
 仓库自带只读自检脚本（不写数据）：
 
@@ -281,8 +282,8 @@ node scripts/verify-unicloud-deploy.mjs \
   https://<前端网页托管域名>
 ```
 
-它会依次探测 `config` / `posts` / CORS 预检，并把失败原因翻译成处置建议（如令牌失效、
-transport 未生效、URL 前缀不匹配、产物缺依赖、集成响应未被网关还原）。
+它会依次探测 `health` / `config` / `posts` / CORS 预检，并把失败原因翻译成处置建议（如集合未创建、
+URL 前缀不匹配、产物缺依赖、集成响应未被网关还原）。
 全部通过后浏览器打开静态站，确认首页项目、文章列表、文章详情、评论提交均正常。
 
 本地不想联网时，可用 harness 模拟 uniCloud 事件：
@@ -320,10 +321,10 @@ uniCloud 云函数要返回 `{ statusCode, headers, body }` 这种「集成响�
 
 ## 注意事项
 
-- **令牌有效期**：`WPS_API_TOKEN` 为会话令牌，过期后接口会返回 500，
-  `message` 为 `WPS 工具调用失败: code=401 Unauthorized`（云函数日志同样有记录）。
-  失效时重新走 auth-guide 换取并更新环境变量。
-  若需要长期免维护，可改用方案 A（`WPS_TRANSPORT=cli`，由 CLI 自动刷新凭据）。
+- **无凭据**：数据源是同服务空间的云数据库，句柄由云函数运行时注入，
+  不存在「令牌过期导致线上 500」这一类故障。唯一的密钥是 `SEED_TOKEN`，且只用于一次性迁移。
+- **数据备份**：迁移源（多维表导出）留在仓库外的 `<local-path>/data/work/mz-corner-数据备份/`，
+  不进版本库；云数据库本身也可在控制台导出。
 - **跨域**：静态托管与云函数不同源，适配层已内置 CORS（含预检短路）。
   生产环境建议把 `CORS_ORIGIN` 设为静态站域名，避免开放给任意来源。
 - **写接口**：评论提交、阅读数写回是公开写操作，如需限制请自行加校验。
@@ -340,14 +341,10 @@ uniCloud 云函数要返回 `{ statusCode, headers, body }` 这种「集成响�
 | 500 + `50002` / `请先检查[环境管理-访问服务]中的HTTP访问服务开关` | 支付宝云网关层：云函数未部署、URL 化路由未生效，或空间的 HTTP 访问服务未开启；也可能是打到了 `api-hz`（调用域名）而非 `dev-hz`（URL 化域名） | ① `pnpm run deploy:unicloud` 重新部署（或 HBuilderX 右键上传）；② **Web 控制台 → 云函数 → 详情 → 配访问路径 `/mz-api`**（这步必须手动，`cloudfunction-config.path` 不生效）；③ 仍报错则到「环境管理 → 访问服务」开启 HTTP 访问服务；④ 核对域名用控制台里显示的那个 |
 | 500 + `Cannot find package 'xxx'` | 产物不自包含（依赖被外置，而云函数目录不带 node_modules） | 重新 `pnpm run build:unicloud`（已加自包含检查，会直接构建失败并列出缺失包）后重新上传云函数 |
 | 客户端收到 **HTTP 200** 但 body 是 `{"statusCode":500,...,"body":"..."}` | 云函数返回的集成响应未被网关还原——缺 `mpserverlessComposedResponse: true` | 更新到最新产物并重新上传云函数（适配层已统一包装） |
-| 500 + `spawn /bin/sh ENOENT` | transport 仍是 `cli`（变量没配、名字写错） | 确认 `WPS_TRANSPORT=http` 已生效 |
-| 500 + `WPS 工具调用失败: code=401 Unauthorized` | `wps` 通道令牌失效 / 未授权 | 重走 auth-guide，更新 `WPS_API_TOKEN`（必要时同时更新 `WPS_REQUEST_SOURCE_ENC`、`WPS_CLIENT_ID`） |
-| 500 + `WPS 365 令牌刷新失败: HTTP 401 ... invalid_client` | `wps365` 通道的 `WPS365_CLIENT_ID` / `WPS365_CLIENT_SECRET` 不对或未配 | 核对开放平台应用的 client_id / client_secret；注意这三个变量在云函数控制台上配，不是本地 |
-| 500 + `WPS 工具调用失败: code=403 enterprise account not supported` | 企业账号走技能渠道被拒（实测：`POST api.wps.cn/office/v5/ai/skill_hub/token/create` 带自己的 `wps_sid` 直接回这个） | 技能渠道不可用，换 `wps365`（企业账号唯一可行路径）或用个人 WPS 账号 |
-| 500 + `WPS 工具调用失败: code=400100 第三方服务错误：无权限` | 令牌所属账号对该多维表无访问权 | 把表共享给该账号（跨账号需企业开启对外分享）；判据：故意用假 file_id 会回「请求参数不支持」，回「无权限」说明 id 有效、纯粹没权限 |
-| 500 + `未知的数据源 BLOG_DATA_PROVIDER="wps365"，可用值：wps` | 线上跑的是**重构前**的旧产物，注册表里只有 `wps` | `pnpm run deploy:unicloud` 重新构建并上传；在此之前用 `NITRO_BLOG_PROVIDER=wps` 可先维持旧通道 |
-| 500 + `HTTP 传输需要 WPS_API_TOKEN 环境变量` | 令牌变量没配或名字写错 | 检查变量名与作用域（要配在 `mz-corner-api` 上） |
-| 接口 200 但列表恒为空 | 旧版本会静默吞掉网关失败码 | 重新构建并上传（当前版本已改为抛错，不再静默返回空） |
+| 500 + 集合不存在 / `DATABASE_COLLECTION_NOT_EXIST` | 集合没建（`--skip-db` 部署过，或首次部署漏了） | `pnpm run deploy:unicloud` 重新部署（会自动上传 `database/*.schema.json` 建集合），或在控制台手动建 4 个集合 |
+| `GET /api/health` 里 `database=unavailable` | 云函数运行时没有注入 `uniCloud` 全局（本地裸跑 Node 时必然如此） | 云端出现才需处理：确认部署的是最新产物；本地用 `pnpm run harness:unicloud` 会注入内存假库 |
+| `POST /api/admin/seed` 回 403 | `SEED_TOKEN` 没配或与请求头 `x-seed-token` 不一致 | 在云函数环境变量里配 `SEED_TOKEN`，请求时带同一值 |
+| 接口 200 但列表恒为空 | 数据还没迁进云数据库 | 跑一次「步骤 4」的数据迁移（迁移后 `posts` 应有 23 篇） |
 | 前端报 CORS | `CORS_ORIGIN` 与静态站域名不一致，或未配安全域名 | 云函数「安全域名」里放行前端域名，并把 `CORS_ORIGIN` 改成静态站实际域名（或留空为 `*`） |
 | 全部 404 | URL 化前缀与请求路径不匹配 | 核对控制台里配的访问路径与请求 URL 前缀是否一致（本项目为 `/mz-api`），不一致时同步设 `UNICLOUD_URL_PREFIX` |
 | 首次调用超时 / 504 | 云函数超时默认仅 5 秒 | 产物已设 `timeout: 20`；若改过，在控制台调大 |
@@ -365,5 +362,5 @@ pnpm run verify:unicloud http://127.0.0.1:8899/mz-api   # 终端 B：跑自检
 pnpm run harness:unicloud full 8899
 ```
 
-> 传占位令牌（如 `WPS_API_TOKEN=dummy WPS_TRANSPORT=http`）时会返回 401，
-> 这正好可以验证自检脚本的失败诊断是否符合预期。
+> harness 会注入一个**内存假库**（`globalThis.uniCloud`）并把产物拷到仓库外加载，
+> 因此本地自检既不碰真实数据，也不会被仓库的 `node_modules` 掩盖依赖问题。

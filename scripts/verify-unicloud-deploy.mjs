@@ -60,14 +60,11 @@ function diagnose(response) {
     const pkg = body.match(/Cannot find package '([^']+)'/)?.[1] || "某依赖";
     return `云函数产物缺依赖（${pkg}）：产物必须自包含，重新执行 pnpm run build:unicloud（已加自包含检查）并重新上传云函数`;
   }
-  if (/spawn \/bin\/sh/.test(body)) {
-    return "transport 仍为 cli：云函数环境变量 WPS_TRANSPORT=http 未生效";
+  if (/uniCloud 运行时不可用/.test(body)) {
+    return "云函数里拿不到 uniCloud 全局：确认上传的是 uniCloud 云函数且运行环境正确；本地自检请用 scripts/local-unicloud-harness.mjs（它会注入内存假库）";
   }
-  if (/code=401/.test(body)) {
-    return "工具网关令牌失效：重走 auth-guide 换取后更新 WPS_API_TOKEN（必要时连同 WPS_REQUEST_SOURCE_ENC、WPS_CLIENT_ID）";
-  }
-  if (/需要 WPS_API_TOKEN/.test(body)) {
-    return "令牌未配置：在云函数环境变量里补 WPS_API_TOKEN（注意变量名拼写）";
+  if (/未知的数据源/.test(body)) {
+    return "数据源名不认识：检查 BLOG_DATA_PROVIDER（或 NITRO_BLOG_PROVIDER）是否拼错，目前内置实现只有 unicloud-db";
   }
   if (response.status === 404) {
     return "404：URL 化路径前缀与请求路径不匹配，检查前缀是否与 baseUrl 一致（或设 UNICLOUD_URL_PREFIX）";
@@ -115,6 +112,23 @@ function unwrap(response) {
 
 console.log(`\n目标：${baseUrl}${origin ? `\n前端域名：${origin}` : ""}\n`);
 
+/* 0. 健康检查 —— 最先看「函数是否活着 + 数据源是否就绪」 */
+const healthRes = unwrap(await probe("/api/health", { headers: { Accept: "application/json" } }));
+if (healthRes.error || healthRes.status !== 200) {
+  record("GET /api/health", false, diagnose(healthRes));
+} else {
+  const json = parseJson(healthRes.text);
+  const data = json?.data ?? {};
+  const ok = json?.code === 0 && data.ok === true;
+  record(
+    "GET /api/health",
+    ok,
+    ok
+      ? `provider=${data.provider} database=${data.database}`
+      : `数据源未就绪：provider=${data.provider ?? "?"} database=${data.database ?? "?"}（云数据库不可用时数据层会显式报错而非返回空数据）`,
+  );
+}
+
 /* 1. 站点配置接口 —— 最轻量，用来判断「函数是否活着 + 数据层是否通」 */
 const configRes = unwrap(await probe("/api/blog/config", { headers: { Accept: "application/json" } }));
 if (configRes.enveloped) {
@@ -142,7 +156,11 @@ if (postsRes.error || postsRes.status !== 200) {
   if (json?.code !== 0) {
     record("GET /api/blog/posts", false, diagnose(postsRes));
   } else if (!Array.isArray(items) || items.length === 0) {
-    record("GET /api/blog/posts", false, "接口通但返回 0 条：检查多维表里是否有「已发布」文章");
+    record(
+      "GET /api/blog/posts",
+      false,
+      "接口通但返回 0 条：检查云数据库 articles 集合是否有 status=published 的文章（数据未迁移时先跑 scripts/seed-unicloud.mjs）",
+    );
   } else {
     record("GET /api/blog/posts", true, `${items.length} 条，首条标题：${items[0]?.title ?? "(无标题)"}`);
   }

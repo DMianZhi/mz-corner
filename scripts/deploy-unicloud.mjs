@@ -12,6 +12,7 @@
  *   --url <URL化地址>               部署后的自检地址，默认由服务空间 id 推导
  *   --cli <路径>                    HBuilderX cli 可执行文件路径
  *   --skip-build                    跳过 build:unicloud（复用现有产物）
+ *   --skip-db                       跳过数据库集合 Schema 上传
  *   --skip-verify                   跳过部署后自检
  *
  * 前置:
@@ -23,7 +24,7 @@
  *   cli.exe（HBuilderX 5.26）同样支持 `cloud functions --upload`，本项目即用它部署。
  */
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { cp, mkdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -76,6 +77,22 @@ await mkdir(path.dirname(targetDir), { recursive: true });
 await cp(sourceDir, targetDir, { recursive: true });
 console.log(`→ 已同步产物到 ${path.relative(root, targetDir)}`);
 
+// 2.5 数据库集合 Schema（放在云函数之前上传：集合先建好，新函数上线即能查到集合）
+if (!args["skip-db"]) {
+  const databaseSource = path.join(root, "deploy/unicloud/database");
+  const databaseTarget = path.join(projectDir, "database");
+  await mkdir(databaseTarget, { recursive: true });
+  const schemas = existsSync(databaseSource)
+    ? readdirSync(databaseSource).filter((file) => file.endsWith(".schema.json"))
+    : [];
+  for (const file of schemas) {
+    await cp(path.join(databaseSource, file), path.join(databaseTarget, file));
+  }
+  console.log(`→ 已同步集合 Schema：${schemas.map((f) => f.replace(".schema.json", "")).join(", ") || "（无）"}`);
+} else {
+  console.log("→ 跳过集合 Schema 上传");
+}
+
 // 3. 确认 HBuilderX 认得这个项目（不认识时 CLI 只会回一句「不是有效的项目名称」）
 const projectList = runCli(cliPath, ["project", "list"]);
 if (!projectList.includes(projectName)) {
@@ -86,7 +103,27 @@ if (!projectList.includes(projectName)) {
   );
 }
 
-// 4. 上传（--force 覆盖；实测不带 --force 也会覆盖，加上只是显式表达意图）
+// 4. 上传集合 Schema（uniCloud 的集合必须先有 Schema 才能建，建完云函数才写得进去）
+if (!args["skip-db"]) {
+  for (const file of readdirSync(path.join(projectDir, "database")).filter((f) => f.endsWith(".schema.json"))) {
+    const collection = file.replace(".schema.json", "");
+    console.log(`→ 上传集合 Schema ${collection}`);
+    runCli(cliPath, [
+      "cloud",
+      "functions",
+      "--upload",
+      "db",
+      "--prj",
+      projectName,
+      "--provider",
+      provider,
+      "--name",
+      collection,
+    ]);
+  }
+}
+
+// 5. 上传云函数（--force 覆盖；实测不带 --force 也会覆盖，加上只是显式表达意图）
 console.log(`→ 上传云函数 ${functionName} 到 [${provider}]`);
 const uploadArgs = [
   "cloud",
@@ -103,7 +140,7 @@ const uploadArgs = [
 ];
 runCli(cliPath, uploadArgs);
 
-// 5. 部署后自检（地址默认从服务空间 id 推导）
+// 6. 部署后自检（地址默认从服务空间 id 推导）
 if (!args["skip-verify"]) {
   const url = args.url || deriveVerifyUrl(cliPath);
   if (url) {
@@ -117,7 +154,9 @@ if (!args["skip-verify"]) {
   }
 }
 
-console.log("\n✔ 部署流程结束。URL 化路径与环境变量仍需在 Web 控制台配置（CLI 不提供这两项）。");
+console.log("\n✔ 部署流程结束。");
+console.log("  URL 化路径（/mz-api）与 SEED_TOKEN 环境变量仍需在 Web 控制台配置（CLI 不提供这两项）。");
+console.log("  首次部署后还要把数据灌进云数据库：pnpm run migrate:unicloud -- --base <URL化地址> --token <SEED_TOKEN>");
 
 /** 从 `--list space` 输出里取服务空间 id，拼出 URL 化默认地址。 */
 function deriveVerifyUrl(cliPath) {

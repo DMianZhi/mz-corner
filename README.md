@@ -20,7 +20,7 @@
 |---|---|
 | 前端 | React 19 · Vite · Tailwind CSS 4 · HashRouter |
 | 后端 | Nitro 2（h3）· 静态托管 + API 一体 |
-| 数据 | WPS 365 多维表（文章 / 评论 / 项目三张表） |
+| 数据 | uniCloud 云数据库（文章 / 评论 / 项目 / 站点配置 四个集合） |
 | 工具链 | pnpm workspace · oxlint · TypeScript |
 
 ## 快速开始
@@ -42,26 +42,18 @@ pnpm run pack
 
 ### 环境变量
 
-后端通过 `server/.env` 提供数据源认证（已 gitignore，不入库）：
+数据源是**同服务空间的云数据库**，句柄由云函数运行时注入，本地开发与测试**不需要任何凭据**。
 
 ```ini
-# WPS 数据源（默认 provider）
-SANDBOX_CREDENTIAL_RESOLVE_AUTH_TOKEN=<token>
-SANDBOX_CREDENTIAL_RESOLVE_URL=<url>
-WPS_SID=<sid>
+# 可选：数据源实现（默认 unicloud-db）
+BLOG_DATA_PROVIDER=unicloud-db
 ```
 
-可选配置：
-
-```ini
-BLOG_DATA_PROVIDER=wps      # 数据源实现，默认 wps
-WPS_TOOL_TRANSPORT=cli      # WPS 传输方式：cli（默认，子进程）或 http
-WPS_API_TOKEN=<token>       # 仅 http 传输需要
-```
+只有一次性数据迁移需要 `SEED_TOKEN`（配在云函数环境变量上，见 [部署文档](deploy/unicloud/README.md)）。
 
 ## 数据层架构
 
-数据访问按「路由 → 业务 → 仓储 → 服务商」四层组织，服务商实现被完全隔离：
+数据访问按「路由 → 业务 → 仓储 → 数据源」四层组织，数据源实现被完全隔离：
 
 ```
 routes/api/blog/*.ts        仅 HTTP 语义：参数解析、状态码、错误响应
@@ -69,12 +61,13 @@ routes/api/blog/*.ts        仅 HTTP 语义：参数解析、状态码、错误�
 services/blog-service.ts    业务规则：筛选、排序、输入清洗、阅读数计算
         ↓
 data/index.ts               provider 注册表 + 工厂（按 BLOG_DATA_PROVIDER 选择）
-data/types.ts               领域模型 + BlogRepository 接口（服务商无关契约）
+data/types.ts               领域模型 + BlogRepository 接口（数据源无关契约）
         ↓
-data/providers/wps/         WPS 多维表实现
-  ├── config.ts             file_id / sheet_id / 中文字段名集中于此
-  ├── mappers.ts            多维表记录 ↔ 领域模型
-  ├── transport.ts          工具网关传输（CLI 子进程 / 直连 HTTP 双实现）
+data/providers/unicloud-db/ uniCloud 云数据库实现
+  ├── collections.ts        集合名 / 分页 / 语义常量
+  ├── client.ts             数据库句柄获取（云函数运行时注入 uniCloud 全局）
+  ├── mappers.ts            云数据库文档 ↔ 领域模型（类型归一 + 缺省兜底）
+  ├── admin.ts              迁移用：清空 / 计数 / 批量写入
   └── repository.ts         组装为 BlogRepository
 ```
 
@@ -82,18 +75,22 @@ data/providers/wps/         WPS 多维表实现
 `registerBlogProvider('<name>', () => new XxxRepository())`，把 `BLOG_DATA_PROVIDER` 指向它即可——
 service 与 route 零改动。
 
-**WPS 传输方式**：`cli` 走 `kdocs-comate-cli` 子进程（需二进制）；`http` 直连工具网关
-`<endpoint>/skill_hub/api/v1/tool`（需 `WPS_API_TOKEN`，适合无法执行外部二进制的环境，
-如云函数）。两种传输对外行为一致，可用 `WPS_TOOL_TRANSPORT` 切换。
+**字段名即领域模型**：集合里存的就是 `title` / `content` / `viewCount` 这样的领域字段，
+不再有「表头中文名 → 领域字段」的映射层（那是多维表时代的产物），控制台里看到的数据可直接排障。
+读取侧仍做类型归一（数据库是 schemaless 的，控制台手改可能塞进非预期类型），
+并兼容历史中文状态值（`已发布` → `published`）。
 
 **配置注入**：数据层不读运行期 `process.env`（平台可能同进程托管多个项目），
 由 `nitro.config.ts` 的 `runtimeConfig.blog` 声明、`plugins/data-source.ts` 启动时注入。
-环境变量仅在无宿主场景（测试、独立脚本、云函数）作为回退。
+环境变量仅在无宿主场景（测试、独立脚本）作为回退。
+
+**运行位置约束**：`unicloud-db` 依赖 `uniCloud` 全局，因此**真实数据访问只在 uniCloud 云函数里可用**。
+本地开发/自检由 `scripts/local-unicloud-harness.mjs` 注入内存假库（`globalThis.uniCloud`）。
 
 ### 测试
 
 ```bash
-cd server && pnpm test    # 业务规则 + 传输解析（20 个用例，含内存假仓储）
+cd server && pnpm test    # 业务规则 + 传输解析（23 个用例，含内存假仓储）
 ```
 
 业务层测试通过 `registerBlogProvider` 注入内存假仓储，无需真实数据源即可验证筛选/排序/清洗等规则。
@@ -111,80 +108,50 @@ cd server && pnpm test    # 业务规则 + 传输解析（20 个用例，含内�
 │   ├── routes/api/blog/  # posts / projects / comments / view / config
 │   ├── services/         # blog-service.ts 业务规则（含单元测试）
 │   ├── data/             # 数据层：接口 + provider 注册表
-│   │   └── providers/wps/# WPS 多维表实现（config / mappers / transport / repository）
+│   │   └── providers/unicloud-db/  # 云数据库实现（collections / client / mappers / admin / repository）
 │   └── proxy-63157.mjs   # 预览代理（63157 → 4917）
+├── scripts/              # 构建 / 部署 / 迁移 / 自检脚本
+├── deploy/unicloud/      # 云函数产物 + database/*.schema.json
 └── docs/designs/         # DESIGN.md 设计规范
 ```
 
 ## 部署
 
-数据层支持两种运行形态，差别只在 `WPS_TOOL_TRANSPORT`：
-
-### 方案 A：传统服务器（transport=cli）
-
-适合任意云主机 / VPS。用 `node-server` 预设构建——**单个进程同时提供前端与 API**：
-
-```bash
-git clone https://github.com/DMianZhi/mz-corner && cd mz-corner
-pnpm install
-
-# 构建独立服务（node-server 预设自带监听器）
-cd server && pnpm run build:standalone
-
-# 启动（默认读 PORT，缺省 3000）
-WPS_SID=<你的 WPS_SID> WPS_TRANSPORT=cli PORT=4917 node .output/server/index.mjs
-```
-
-前置条件：
-- `kdocs-comate-cli` 二进制放入 `PATH`（或设 `WPS_CLI_BIN` 指向绝对路径）
-- `WPS_SID` 通过环境变量传入（CLI 自行处理令牌交换与刷新）
-- 若希望 Nginx 托管静态文件：静态根指向 `client/dist`，`/api/` 反代到 `127.0.0.1:4917`；
-  或者直接用上面单进程模式，无需额外 Web 服务器
-
-> 注：`pnpm run pack` 产出的 `.output` 是平台托管用的 `node-listener` 预设（不含监听器，
-> 由平台接管生命周期），**不适用于独立部署**；独立部署请用上述 `node-server` 预设。
-
-### 方案 B：Serverless / 云函数（transport=http）
-
-适合无法执行外部二进制的环境（uniCloud 云函数、Vercel Functions 等）。
-完整步骤见 [`deploy/unicloud/README.md`](deploy/unicloud/README.md)。
+线上形态：**静态前端（前端网页托管）+ API（云函数）+ 数据（同服务空间云数据库）**。
+完整步骤（含首次数据迁移）见 [`deploy/unicloud/README.md`](deploy/unicloud/README.md)。
 
 ```bash
 pnpm run build:unicloud           # 产出 deploy/unicloud/cloudfunctions/mz-corner-api
-pnpm run deploy:unicloud          # 一条命令：构建 + 同步 + CLI 上传 + 自检
-pnpm run prepare:unicloud alipay  # 可选：重建 uniCloud 项目骨架（aliyun|tencent|alipay）
+pnpm run deploy:unicloud          # 构建 + 同步产物 + 上传集合 Schema + CLI 上传 + 自检
+pnpm run migrate:unicloud -- --base <URL化地址> --token <SEED_TOKEN>   # 首次灌数据（幂等）
 ```
 
 云函数 `package.json` 的 `cloudfunction-config` 已声明 `runtime: Nodejs18`、`path: /mz-api`
-（URL 化前缀）、`timeout: 20`；上传部署后可用自检脚本验证：
+（URL 化前缀）、`timeout: 20`；部署后用只读自检脚本验证：
 
 ```bash
 node scripts/verify-unicloud-deploy.mjs <URL化地址> [前端域名]
 ```
 
-云函数侧环境变量：
+云函数侧环境变量只需两个：
 
 ```ini
-WPS_TRANSPORT=http
-WPS_API_TOKEN=<工具网关令牌>
-WPS_REQUEST_SOURCE_ENC=<请求签名>
-WPS_CLIENT_ID=<客户端 ID>
+SEED_TOKEN=<一次性迁移令牌>
+CORS_ORIGIN=<静态站域名>
 ```
 
-该模式直连 `<endpoint>/skill_hub/api/v1/tool`，无需 CLI。
-令牌获取：`https://<endpoint>/kdocs-auth/auth-guide`（浏览器授权，账号登录后回调下发，支持刷新）。
+### 本地开发与自检
 
-注意：`WPS_TRANSPORT` 必须是 `http`（云函数里没有 `/bin/sh` 与 CLI 二进制，留空会全量 500）；
-令牌失效时接口返回 500 且 `message` 为 `code=401 Unauthorized`，不会静默返回空列表。
-排查表见 [`deploy/unicloud/README.md`](deploy/unicloud/README.md#排查)。
+```bash
+pnpm run harness:unicloud                              # 终端 A：内存假库 + 模拟 uniCloud 事件（:8899）
+pnpm run verify:unicloud http://127.0.0.1:8899/mz-api  # 终端 B：跑自检
+```
 
-### 两种形态已验证的行为
+### 为什么不做独立服务器部署
 
-| 项目 | cli | http |
-|---|---|---|
-| 文章列表 / 项目 / 配置读取 | ✅ | ✅ |
-| 阅读数写回 / 评论创建 | ✅ | ✅ |
-| 独立启动（`node-server` 预设） | ✅ 前端+API 单进程 | 同上 |
+云数据库只能以云函数身份（服务空间）访问，uniCloud 没有公开的数据库 REST API，
+所以 `unicloud-db` 在普通 VPS 上拿不到数据。若要在云主机上跑，需另实现一个走 HTTP 的数据源
+（Postgres / SQLite / 自建 API 皆可）——`BlogRepository` 契约与 provider 注册表就是为这种替换留的。
 
 ## License
 

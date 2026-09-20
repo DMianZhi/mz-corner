@@ -27,29 +27,12 @@ export default defineNitroConfig({
     nitro: {
       envPrefix: '',
     },
-    // 博客数据源配置（运行期经 plugins/data-source.ts 注入数据层）
+    // 博客数据源（运行期经 plugins/data-source.ts 注入数据层）
+    // 只有一个内置实现 unicloud-db，此开关仅用于将来替换数据源或测试注入。
+    // 注意：runtimeConfig 的取值会被构建期内联进产物，运行期改普通环境变量无效，
+    // 需要覆盖请用 NITRO_BLOG_PROVIDER（Nitro 的 envPrefix='' 前缀规则）。
     blog: {
-      provider: process.env.BLOG_DATA_PROVIDER || 'wps365',
-      wps: {
-        fileId: process.env.WPS_BLOG_FILE_ID || '',
-        // 留空 = 未显式指定：运行期由数据层回退到 WPS_TRANSPORT 环境变量。
-        // 不可写死 'cli'——Nitro 会把构建期取值内联进产物，运行期再配 WPS_TRANSPORT 将被覆盖。
-        transport: process.env.WPS_TRANSPORT || '',
-        cliBin: process.env.WPS_CLI_BIN || 'kdocs-comate-cli',
-        endpoint: process.env.WPS_TOOL_ENDPOINT || '',
-        apiToken: process.env.WPS_API_TOKEN || '',
-        requestSourceEnc: process.env.WPS_REQUEST_SOURCE_ENC || '',
-        clientId: process.env.WPS_CLIENT_ID || '',
-        cliVersion: process.env.WPS_CLI_VERSION || '',
-      },
-      // WPS 365 Open API（企业账号通道；refresh_token 长期有效，运行期换 access_token）
-      wps365: {
-        baseUrl: process.env.WPS365_BASE_URL || '',
-        clientId: process.env.WPS365_CLIENT_ID || '',
-        clientSecret: process.env.WPS365_CLIENT_SECRET || '',
-        refreshToken: process.env.WPS365_REFRESH_TOKEN || '',
-        accessToken: process.env.WPS365_ACCESS_TOKEN || '',
-      },
+      provider: process.env.BLOG_DATA_PROVIDER || 'unicloud-db',
     },
   },
 })

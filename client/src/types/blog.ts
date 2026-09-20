@@ -76,7 +76,7 @@ export interface Project {
   status: 'live' | 'wip' | 'archived' | string;
 }
 
-/** 站点配置（多维表「站点配置」表驱动） */
+/** 站点配置（site_config 集合驱动） */
 export interface SiteConfig {
   name: string;
   nameEn: string;
