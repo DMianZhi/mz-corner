@@ -35,13 +35,29 @@ await writeFile(
 
 由 \`pnpm run prepare:unicloud\` 生成，内容来自 \`deploy/unicloud/cloudfunctions/mz-corner-api\`。
 
-## 用 HBuilderX 上传
+## 部署
+
+### 推荐：命令行（实测 Windows 可用）
+
+在**仓库根目录**执行：
+
+\`\`\`bash
+pnpm run deploy:unicloud -- --provider ${provider}
+\`\`\`
+
+它会重新构建产物、同步到本目录、调 HBuilderX 自带 cli 上传，并跑一次线上自检。
+前提：HBuilderX 至少打开过仓库根目录一次（项目名出现在 \`cli project list\` 里），
+本目录已关联服务空间，且仓库根有 \`manifest.json\`（含 appid）。
+
+### 备选：HBuilderX 图形界面
 
 1. HBuilderX → 文件 → 打开目录 → 选择本目录
 2. 右键 \`cloudfunctions/mz-corner-api\` → **上传部署**
    （若提示未关联服务空间，先右键 \`uniCloud-${provider}\` → 关联云服务空间或项目）
-3. 控制台 → 云函数 → \`mz-corner-api\` → 环境变量，添加：
 
+## 部署后仍必须在 Web 控制台做的两件事
+
+1. 控制台 → 云函数 → \`mz-corner-api\` → 环境变量，添加：
    | 变量 | 值 |
    |---|---|
    | \`WPS_TRANSPORT\` | \`http\` |
@@ -53,8 +69,8 @@ await writeFile(
    \`WPS_TRANSPORT\` 必须为 \`http\`：云函数里没有 \`/bin/sh\` 也没有 CLI 二进制。
    令牌失效时接口返回 500 + \`code=401 Unauthorized\`（不会静默返回空列表）。
 
-4. 控制台 → 云函数 → \`mz-corner-api\` → **URL 化**，设置路径前缀
-5. 前端构建时指向该地址：
+2. 控制台 → 云函数 → \`mz-corner-api\` → **URL 化**，设置路径前缀
+3. 前端构建时指向该地址：
 
    \`\`\`bash
    cd client
@@ -69,4 +85,4 @@ await writeFile(
 
 console.log(`✔ uniCloud 项目骨架已生成: ${path.relative(root, projectDir)}`);
 console.log(`  云函数: ${path.relative(root, target)}`);
-console.log("  下一步：用 HBuilderX 打开该目录，右键云函数 → 上传部署");
+console.log("  下一步：pnpm run deploy:unicloud -- --provider " + provider + "（或 HBuilderX 右键上传部署）");

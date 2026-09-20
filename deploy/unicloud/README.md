@@ -62,7 +62,30 @@ uniCloud-alipay/cloudfunctions/mz-corner-api/
 
 （`pnpm run prepare:unicloud alipay` 会直接生成这个骨架目录，参数换成 `aliyun` / `tencent` 即对应其他云商。）
 
-然后在 HBuilderX 里：
+### 推荐：命令行上传（一条命令，实测可用）
+
+```bash
+pnpm run deploy:unicloud                  # 构建 → 同步产物 → CLI 上传 → 自动自检
+pnpm run deploy:unicloud -- --skip-build  # 复用现有产物，只做上传 + 自检
+```
+
+脚本 `scripts/deploy-unicloud.mjs` 依次做：`build:unicloud`（含自包含检查）
+→ 同步产物到 `uniCloud-alipay/cloudfunctions/mz-corner-api/`
+→ 调 HBuilderX 自带 cli 上传（`--force` 覆盖）
+→ 从服务空间 id 推导 URL 化地址并跑 `verify-unicloud-deploy.mjs`。
+
+常用参数：`--provider alipay|aliyun|tcb`、`--prj <HBuilderX 项目名>`、`--cli <cli 路径>`、
+`--url <自检地址>`、`--skip-verify`。cli 路径可用 `--cli` 或环境变量 `HBX_CLI` 指定
+（Windows 默认 `C:\Users\<你>\HBuilderX\cli.exe`，macOS `/Applications/HBuilderX.app/Contents/MacOS/cli`）。
+
+不想用脚本时，裸命令等价：
+
+```bash
+"C:\Users\<你>\HBuilderX\cli.exe" cloud functions --upload cloudfunction \
+  --prj mz-corner --provider alipay --name mz-corner-api --force
+```
+
+### 备选：图形界面（等效）
 
 1. **文件 → 打开目录**，选中 **仓库根目录 `mz-corner`**（注意：不是 `uniCloud-alipay` 本身）
 2. 在左侧项目管理器展开 `uniCloud-alipay`，右键它 → **关联云服务空间或项目...**
@@ -102,16 +125,23 @@ uniCloud-alipay/cloudfunctions/mz-corner-api/
 （或单函数「上传部署」）→ 控制台输出「云函数 mz-corner-api 上传完成」即成功。
 注意上传成功 ≠ 能访问，URL 化路由还得单独配，见「步骤 4」。
 
-> 另：HBuilderX 控制台会提示「已支持通过命令行 cli 部署 uniCloud 资源」——
-> 那个 CLI **仅支持 Linux**（官方文档原文：仅适用于 linux 命令行调用），Windows 上无法用。
+> **CLI 在 Windows 上可用（实测，与官方文档说法不一致）**：官方文档写「仅适用于 linux 命令行调用」，
+> 但 HBuilderX 5.26 桌面端自带的 `cli.exe` 实测支持 `cloud functions --list / --upload`，
+> 本项目云函数就是用它上传的（`--provider` 取值 `tcb|aliyun|alipay`，支付宝云同样可用）。
+> 且 CLI 上传同样要求项目根存在 `manifest.json`（含 `appid`）——实测把该文件移走后，
+> CLI 直接报「缺少appid，请在manifest.json中设置appid」，与图形界面同因。
 
 > 产物里已带 `node_modules`（约 1.6MB），选「上传部署」即可，不必用「云端安装依赖」。
 > 若 HBuilderX 提示依赖未安装，忽略即可（我们不打 npm 安装，依赖随产物一起上传）。
 
-> **关于 CLI**：DCloud 只在 **Linux** 提供可上传 uniCloud 云函数的 CLI
-> （<https://hx.dcloud.net.cn/cli/README>，用途是服务器上做 CI 自动化）；
-> Windows / macOS 桌面端只能走 HBuilderX 图形界面。
-> npm 上**不存在** `@dcloudio/uni-cloud-cli` 这个包，不要按旧文档去找。
+> **CLI 的能力边界**：`--list / --upload / --download / --run / --create / --info`
+> （资源类型 `cloudfunction | common | db | vf | action | space`）都能用，
+> 但**不能配 URL 化路径、不能配环境变量**——这两项仍必须走 Web 控制台（步骤 3、4）。
+> 另外 npm 上**不存在** `@dcloudio/uni-cloud-cli` 这个包，不要按旧文档去找。
+>
+> 失败判定坑：CLI 上传失败时退出码仍为 0，失败信息是 stdout 里的
+> `-1:cloud functions:上传失败：...`（如支付宝云偶发 `aop.unknow-error 系统繁忙`，重跑即过）。
+> 用脚本部署时已自动识别这一行。
 
 ## 步骤 3：配置云函数环境变量
 
@@ -265,7 +295,7 @@ uniCloud 云函数要返回 `{ statusCode, headers, body }` 这种「集成响�
 
 | 现象 | 原因 | 处理 |
 |---|---|---|
-| 500 + `50002` / `请先检查[环境管理-访问服务]中的HTTP访问服务开关` | 支付宝云网关层：云函数未部署、URL 化路由未生效，或空间的 HTTP 访问服务未开启；也可能是打到了 `api-hz`（调用域名）而非 `dev-hz`（URL 化域名） | ① HBuilderX 上传云函数；② **Web 控制台 → 云函数 → 详情 → 配访问路径 `/mz-api`**（这步必须手动，`cloudfunction-config.path` 不生效）；③ 仍报错则到「环境管理 → 访问服务」开启 HTTP 访问服务；④ 核对域名用控制台里显示的那个 |
+| 500 + `50002` / `请先检查[环境管理-访问服务]中的HTTP访问服务开关` | 支付宝云网关层：云函数未部署、URL 化路由未生效，或空间的 HTTP 访问服务未开启；也可能是打到了 `api-hz`（调用域名）而非 `dev-hz`（URL 化域名） | ① `pnpm run deploy:unicloud` 重新部署（或 HBuilderX 右键上传）；② **Web 控制台 → 云函数 → 详情 → 配访问路径 `/mz-api`**（这步必须手动，`cloudfunction-config.path` 不生效）；③ 仍报错则到「环境管理 → 访问服务」开启 HTTP 访问服务；④ 核对域名用控制台里显示的那个 |
 | 500 + `Cannot find package 'xxx'` | 产物不自包含（依赖被外置，而云函数目录不带 node_modules） | 重新 `pnpm run build:unicloud`（已加自包含检查，会直接构建失败并列出缺失包）后重新上传云函数 |
 | 客户端收到 **HTTP 200** 但 body 是 `{"statusCode":500,...,"body":"..."}` | 云函数返回的集成响应未被网关还原——缺 `mpserverlessComposedResponse: true` | 更新到最新产物并重新上传云函数（适配层已统一包装） |
 | 500 + `spawn /bin/sh ENOENT` | transport 仍是 `cli`（变量没配、名字写错） | 确认 `WPS_TRANSPORT=http` 已生效 |

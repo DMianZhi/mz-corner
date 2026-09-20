@@ -20,6 +20,7 @@
     "check:types:server": "pnpm --filter @wps365-open/boilerplate-server check:types",
     "build:unicloud": "node scripts/build-unicloud.mjs",
     "prepare:unicloud": "node scripts/prepare-unicloud-project.mjs",
+    "deploy:unicloud": "node scripts/deploy-unicloud.mjs",
     "harness:unicloud": "node scripts/local-unicloud-harness.mjs",
     "verify:unicloud": "node scripts/verify-unicloud-deploy.mjs"
   },

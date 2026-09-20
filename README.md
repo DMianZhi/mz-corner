@@ -150,8 +150,9 @@ WPS_SID=<你的 WPS_SID> WPS_TRANSPORT=cli PORT=4917 node .output/server/index.m
 完整步骤见 [`deploy/unicloud/README.md`](deploy/unicloud/README.md)。
 
 ```bash
-pnpm run build:unicloud          # 产出 deploy/unicloud/cloudfunctions/mz-corner-api
-pnpm run prepare:unicloud alipay  # 可选：生成 uniCloud 项目骨架（aliyun|tencent|alipay）
+pnpm run build:unicloud           # 产出 deploy/unicloud/cloudfunctions/mz-corner-api
+pnpm run deploy:unicloud          # 一条命令：构建 + 同步 + CLI 上传 + 自检
+pnpm run prepare:unicloud alipay  # 可选：重建 uniCloud 项目骨架（aliyun|tencent|alipay）
 ```
 
 云函数 `package.json` 的 `cloudfunction-config` 已声明 `runtime: Nodejs18`、`path: /mz-api`
