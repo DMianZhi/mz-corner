@@ -4,5 +4,11 @@
   "description": "mz-corner 博客 API —— Nitro 产物 + uniCloud 适配层",
   "main": "index.js",
   "private": true,
-  "dependencies": {}
+  "dependencies": {},
+  "cloudfunction-config": {
+    "runtime": "Nodejs18",
+    "path": "/mz-api",
+    "timeout": 20,
+    "memorySize": 512
+  }
 }

@@ -8,6 +8,23 @@
 const CORS_METHODS = 'GET,POST,PATCH,OPTIONS';
 const CORS_HEADERS = 'content-type,accept';
 
+/**
+ * 云函数 URL 化路径前缀。
+ *
+ * 各家云商对前缀的剥离行为不一致：有的传进来的 event.path 已去掉前缀（'/api/blog/posts'），
+ * 有的仍是完整路径（'/mz-api/api/blog/posts'）。这里做幂等剥离——两种形态都能正确路由，
+ * 控制台改了前缀时同步改这个环境变量即可。
+ */
+const URL_PREFIX = (process.env.UNICLOUD_URL_PREFIX || '/mz-api').replace(/\/+$/, '');
+
+function normalizePath(rawPath) {
+  const path = rawPath || '/';
+  if (URL_PREFIX && (path === URL_PREFIX || path.startsWith(`${URL_PREFIX}/`))) {
+    return path.slice(URL_PREFIX.length) || '/';
+  }
+  return path;
+}
+
 /** Nitro 产物只在首次调用时加载，冷启动后复用。 */
 let handlerPromise;
 function loadHandler() {
@@ -45,7 +62,7 @@ function toNitroEvent(event = {}) {
   }
   if (!headers.host) headers.host = 'localhost';
 
-  const path = event.path || '/';
+  const path = normalizePath(event.path);
   const query = event.queryStringParameters || {};
 
   return {
