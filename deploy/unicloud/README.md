@@ -298,16 +298,36 @@ https://<unicloud-space-id>.dev-hz.cloudbasefunction.cn/mz-api
 
 ```bash
 cd client
+rm -rf dist   # 必做：否则上次构建的旧 hash 文件会被一起传上去，越传越多
 VITE_API_BASE=https://<unicloud-space-id>.dev-hz.cloudbasefunction.cn/mz-api pnpm run build
+cd ..
 ```
 
-把 `client/dist` 全部文件上传到 **前端网页托管**，两种方式任选：
+上传到 **前端网页托管**（实测 CLI 可用，不必开控制台）：
 
-- 控制台：<https://unicloud.dcloud.net.cn> → 前端网页托管 → **上传文件 / 上传文件夹**（无需 HBuilderX）
-- HBuilderX：**发行 → 上传网站到服务器**（需项目里先关联服务空间）
+```bash
+"<local-path>/HBuilderX/cli.exe" hosting deploy --prj mz-corner --provider alipay \
+  --space <unicloud-space-id> --source client/dist --prefix mz-corner/
+```
+
+其他方式（等效）：控制台 <https://unicloud.dcloud.net.cn> → 前端网页托管 → **上传文件 / 上传文件夹**；
+或 HBuilderX **发行 → 上传网站到服务器**。查看/清理云端文件用 `cli hosting list|delete`。
+
+**线上地址**（实测可用）：
+
+```
+https://<unicloud-space-id>-static.normal.cloudstatic.cn/mz-corner/index.html
+```
 
 项目使用 `HashRouter`，所有路由都在 `#/` 之后，因此不需要配置 SPA fallback。
-上传后在托管页「基础设置」里记下**默认域名**，下一步要用。
+
+> **这个服务空间不是博客独占**：根目录还挂着 `password_tools/`、`FlappyBird/`（根 `index.html`
+> 就是 FlappyBird），所以博客放 `mz-corner/` 前缀，不要去动根目录。
+>
+> **坑：子目录不会解析 index**——该空间的 404 兜底页被设成了 `password_tools/index.html`，
+> 于是 `/mz-corner/`（目录形式）实测 **302 → `password_tools/index.html`**，只有
+> `/mz-corner/index.html`（精确到文件）才返回博客。`/` 能命中根 index 只是因为根目录被特殊
+> 处理。所以对外分享的链接必须带 `index.html`；想去掉这个尾巴，只能在控制台改兜底页或绑自定义域名。
 
 > 若把前端也部署在同一台服务器/同源路径下，`VITE_API_BASE` 留空即可（默认相对路径 `./api/blog`）。
 

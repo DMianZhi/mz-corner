@@ -130,7 +130,16 @@ pnpm run deploy:unicloud          # 构建 + 同步产物 + 上传集合 Schema 
 pnpm run migrate:unicloud -- --out /tmp/payload.json   # A: 不需要 SEED_TOKEN —— 生成初始化数据文件
 node scripts/export-init-data.mjs --in /tmp/payload.json   #    再执行 CLI --initdatabase 上传
 pnpm run migrate:unicloud -- --base <URL化地址> --token <SEED_TOKEN>   # B: 幂等，可重跑/清理
+
+# 前端（uniCloud 前端网页托管；CLI 可直接传，见部署文档「步骤 6」）
+cd client && rm -rf dist && VITE_API_BASE=<URL化地址> pnpm run build && cd ..
+"<HBuilderX>/cli.exe" hosting deploy --prj mz-corner --provider alipay \
+  --space <unicloud-space-id> --source client/dist --prefix mz-corner/
 ```
+
+线上入口：<https://<unicloud-space-id>-static.normal.cloudstatic.cn/mz-corner/index.html>
+（该空间与 `password_tools` / `FlappyBird` 共用，博客走 `mz-corner/` 前缀；子目录不解析 index，
+所以链接必须带 `index.html`）。
 
 云函数 `package.json` 的 `cloudfunction-config` 已声明 `runtime: Nodejs18`、`path: /mz-api`
 （URL 化前缀）、`timeout: 20`；部署后用只读自检脚本验证：
