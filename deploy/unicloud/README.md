@@ -64,9 +64,18 @@ uniCloud-alipay/cloudfunctions/mz-corner-api/
 
 然后在 HBuilderX 里：
 
-1. **文件 → 打开目录**，选中 `uniCloud-alipay`
-2. 若提示未关联服务空间：右键 `uniCloud-alipay` → **关联云服务空间或项目**
-3. 右键 `cloudfunctions/mz-corner-api` → **上传部署**（快捷键 `Ctrl+U`）
+1. **文件 → 打开目录**，选中 **仓库根目录 `mz-corner`**（注意：不是 `uniCloud-alipay` 本身）
+2. 在左侧项目管理器展开 `uniCloud-alipay`，右键它 → **关联云服务空间或项目...**
+3. 展开 `cloudfunctions`，右键 `mz-corner-api` → **上传部署**（`Ctrl+U`）
+
+> **为什么必须打开仓库根**：uniCloud 插件的右键菜单条件是
+> `workspaceFolderRelativePath =~ /^uniCloud\-(tcb|aliyun|alipay)\/cloudfunctions$/`，
+> 即相对**项目根**的路径必须是 `uniCloud-alipay/cloudfunctions/...`。
+> 若把 `uniCloud-alipay` 本身当项目根打开，相对路径变成 `cloudfunctions/...`，
+> 菜单不会报错、只是默默不出现（上传部署、关联云服务空间都找不到）。
+> 同理：右键要在**左侧项目管理器**里，且只选中 1 个节点（`explorerResourceCount == 1`）。
+>
+> 若菜单仍不出现：右键项目根 → **重新识别项目类型**；或 **文件 → 导入 → 从本地目录导入** 重新导入。
 
 > 产物里已带 `node_modules`（约 1.6MB），选「上传部署」即可，不必用「云端安装依赖」。
 > 若 HBuilderX 提示依赖未安装，忽略即可（我们不打 npm 安装，依赖随产物一起上传）。
