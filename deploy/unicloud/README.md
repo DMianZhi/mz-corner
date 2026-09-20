@@ -77,6 +77,30 @@ uniCloud-alipay/cloudfunctions/mz-corner-api/
 >
 > 若菜单仍不出现：右键项目根 → **重新识别项目类型**；或 **文件 → 导入 → 从本地目录导入** 重新导入。
 
+### 前置：项目必须有 appid（非 uni-app 项目会卡在这里）
+
+点「关联云服务空间或项目」时若报：
+
+```
+缺少appid，请在manifest.json中设置appid
+```
+
+这不是配置问题：uniCloud 插件的关联/上传请求都要带 `appid`
+（实测 `share/index.js` 的 `getAppid()` 只读 `<项目根>/manifest.json` 的 `appid` 字段，
+上传请求 `/serverless/function/...` 的 body 里也带 `appid`），
+而 `appid` **只能由 DCloud 云端分配**（官方文档：新建 uni-app 项目时云端分配）。
+本仓库是 Vite 工程，没有这个文件，所以关联过不去。
+
+两条路，推荐第二条：
+
+| 方案 | 做法 | 代价 |
+|---|---|---|
+| A. 给仓库根补 manifest.json | 从任意 uni-app 项目拷一个 appid，写到仓库根 `manifest.json`（该文件已 gitignore） | 仓库根会被 HBuilderX 当成 uni-app 项目 |
+| **B. 用一个 uni-app 项目做部署宿主（推荐）** | HBuilderX 新建 uni-app 项目 + 勾选启用 uniCloud + 服务商支付宝云 + 关联已有服务空间；再把 `mz-corner-api` 拷进它的 `uniCloud-alipay/cloudfunctions/` | 部署宿主不在仓库内（云函数本体仍由本仓库脚本生成） |
+
+方案 B 就是 DCloud 的官方流程（新建项目时云端分配 appid，顺带把服务空间关联好），
+不会再撞这类未文档化的墙。
+
 > 产物里已带 `node_modules`（约 1.6MB），选「上传部署」即可，不必用「云端安装依赖」。
 > 若 HBuilderX 提示依赖未安装，忽略即可（我们不打 npm 安装，依赖随产物一起上传）。
 
