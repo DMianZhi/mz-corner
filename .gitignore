@@ -59,3 +59,5 @@ uniCloud-*/
 # ── 凭据导出文件（曾误入库，2026-09-20 修正）──
 .env.kdocs
 *.env.kdocs
+h3probe.tmp.mjs
+*.tmp.mjs
