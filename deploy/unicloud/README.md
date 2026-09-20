@@ -160,6 +160,14 @@ pnpm run deploy:unicloud -- --skip-build  # 复用现有产物，只做上传 + 
 > 即：**企业账号既拿不到 `WPS_API_TOKEN`，也就配不出 `wps` 通道**。
 > 连带影响：README 里「云主机 + `WPS_SID` + `cli`」的方案 A 对当前账号同样不通——
 > CLI 续签走的也是这个端点（实测现有密钥链令牌已失效，调用返回 401，续签即撞 403）。
+>
+> **个人 WPS 账号实测可用**（换号后重走一次即可）：
+> `POST https://api.wps.cn/office/v5/ai/skill_hub/token/create`，`Cookie: wps_sid=<个人账号 sid>`
+> → `{"code":200,"data":{"token":"...","expires_in":31535956}}`（约 365 天，不是短会话）。
+> 拿这个 token 打网关（`Authorization: Bearer <token>`，`x-client-id` / `x-request-source-enc` 可不填）
+> 能正常列该账号自己的云盘，说明通道完全可用。
+> **唯一剩下的坑是文件权限**：个人账号读企业账号名下的表会回
+> `{"code":400100,"message":"第三方服务错误：无权限"}`，必须把表**共享给该个人账号**。
 
 两个通道都可能用到的：
 
@@ -324,6 +332,7 @@ uniCloud 云函数要返回 `{ statusCode, headers, body }` 这种「集成响�
 | 500 + `WPS 工具调用失败: code=401 Unauthorized` | `wps` 通道令牌失效 / 未授权 | 重走 auth-guide，更新 `WPS_API_TOKEN`（必要时同时更新 `WPS_REQUEST_SOURCE_ENC`、`WPS_CLIENT_ID`） |
 | 500 + `WPS 365 令牌刷新失败: HTTP 401 ... invalid_client` | `wps365` 通道的 `WPS365_CLIENT_ID` / `WPS365_CLIENT_SECRET` 不对或未配 | 核对开放平台应用的 client_id / client_secret；注意这三个变量在云函数控制台上配，不是本地 |
 | 500 + `WPS 工具调用失败: code=403 enterprise account not supported` | 企业账号走技能渠道被拒（实测：`POST api.wps.cn/office/v5/ai/skill_hub/token/create` 带自己的 `wps_sid` 直接回这个） | 技能渠道不可用，换 `wps365`（企业账号唯一可行路径）或用个人 WPS 账号 |
+| 500 + `WPS 工具调用失败: code=400100 第三方服务错误：无权限` | 令牌所属账号对该多维表无访问权 | 把表共享给该账号（跨账号需企业开启对外分享）；判据：故意用假 file_id 会回「请求参数不支持」，回「无权限」说明 id 有效、纯粹没权限 |
 | 500 + `未知的数据源 BLOG_DATA_PROVIDER="wps365"，可用值：wps` | 线上跑的是**重构前**的旧产物，注册表里只有 `wps` | `pnpm run deploy:unicloud` 重新构建并上传；在此之前用 `NITRO_BLOG_PROVIDER=wps` 可先维持旧通道 |
 | 500 + `HTTP 传输需要 WPS_API_TOKEN 环境变量` | 令牌变量没配或名字写错 | 检查变量名与作用域（要配在 `mz-corner-api` 上） |
 | 接口 200 但列表恒为空 | 旧版本会静默吞掉网关失败码 | 重新构建并上传（当前版本已改为抛错，不再静默返回空） |
