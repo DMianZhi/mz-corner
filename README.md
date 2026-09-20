@@ -133,13 +133,14 @@ pnpm run migrate:unicloud -- --base <URL化地址> --token <SEED_TOKEN>   # B: �
 
 # 前端（uniCloud 前端网页托管；CLI 可直接传，见部署文档「步骤 6」）
 cd client && rm -rf dist && VITE_API_BASE=<URL化地址> pnpm run build && cd ..
+# 省略 --prefix 即传到云空间根目录（写 --prefix / 会被路径规范化搞坏）
 "<HBuilderX>/cli.exe" hosting deploy --prj mz-corner --provider alipay \
-  --space <unicloud-space-id> --source client/dist --prefix mz-corner/
+  --space <unicloud-space-id> --source client/dist
 ```
 
-线上入口：<https://<unicloud-space-id>-static.normal.cloudstatic.cn/mz-corner/index.html>
-（该空间与 `password_tools` / `FlappyBird` 共用，博客走 `mz-corner/` 前缀；子目录不解析 index，
-所以链接必须带 `index.html`）。
+线上入口：<https://<unicloud-space-id>-static.normal.cloudstatic.cn/>
+（根域名直达需在控制台把静态站点「索引文件」由 `FlappyBird/index.html` 改成 `index.html`；
+改之前用 `/index.html` 访问。详见部署文档「步骤 6」）
 
 云函数 `package.json` 的 `cloudfunction-config` 已声明 `runtime: Nodejs18`、`path: /mz-api`
 （URL 化前缀）、`timeout: 20`；部署后用只读自检脚本验证：

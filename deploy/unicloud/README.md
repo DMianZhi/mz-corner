@@ -306,28 +306,52 @@ cd ..
 上传到 **前端网页托管**（实测 CLI 可用，不必开控制台）：
 
 ```bash
+# 注意：省略 --prefix 才是「传到云空间根目录」（CLI 文档口径：不填则目标为根目录）
 "<local-path>/HBuilderX/cli.exe" hosting deploy --prj mz-corner --provider alipay \
-  --space <unicloud-space-id> --source client/dist --prefix mz-corner/
+  --space <unicloud-space-id> --source client/dist
 ```
 
 其他方式（等效）：控制台 <https://unicloud.dcloud.net.cn> → 前端网页托管 → **上传文件 / 上传文件夹**；
 或 HBuilderX **发行 → 上传网站到服务器**。查看/清理云端文件用 `cli hosting list|delete`。
 
-**线上地址**（实测可用）：
+> **坑：不要写 `--prefix /`**。实测在 Windows 上它会把文件写到被路径规范化搞坏的位置——云端凭空
+> 多出一个名为 `..\..\..\..` 的文件夹，而 `hosting list --prefix /assets/` 却能看到文件，
+> 造成「列表里有、HTTP 取不到」的假象（`/assets/…` 一律 404）。省略 `--prefix` 即根目录，
+> 实测 15 个文件全部生效。
+
+**线上地址**：
 
 ```
-https://<unicloud-space-id>-static.normal.cloudstatic.cn/mz-corner/index.html
+https://<unicloud-space-id>-static.normal.cloudstatic.cn/            ← 根域名直达（需先改控制台一处，见下）
+https://<unicloud-space-id>-static.normal.cloudstatic.cn/index.html  ← 改配置前也能用
 ```
 
 项目使用 `HashRouter`，所有路由都在 `#/` 之后，因此不需要配置 SPA fallback。
 
-> **这个服务空间不是博客独占**：根目录还挂着 `password_tools/`、`FlappyBird/`（根 `index.html`
-> 就是 FlappyBird），所以博客放 `mz-corner/` 前缀，不要去动根目录。
->
-> **坑：子目录不会解析 index**——该空间的 404 兜底页被设成了 `password_tools/index.html`，
-> 于是 `/mz-corner/`（目录形式）实测 **302 → `password_tools/index.html`**，只有
-> `/mz-corner/index.html`（精确到文件）才返回博客。`/` 能命中根 index 只是因为根目录被特殊
-> 处理。所以对外分享的链接必须带 `index.html`；想去掉这个尾巴，只能在控制台改兜底页或绑自定义域名。
+### 控制台必须改一处：「索引文件」
+
+`/` 返回什么，**由支付宝云静态站点的「索引文件」配置决定，不是由根目录里有没有 `index.html` 决定**
+（官方文档：索引文件默认 `index.html`，且**支持自定义路径**；访问域名时按 `域名 + 索引路径/索引文件` 路由）。
+实测该空间现状为 索引文件 = `FlappyBird/index.html`、404 页面 = `password_tools/index.html`：
+
+| 请求 | 实测结果 | 原因 |
+|---|---|---|
+| `/` | 302 → `/FlappyBird/index.html` | 索引文件配置指向 FlappyBird |
+| `/index.html` | 200 博客 ✓ | 精确命中文件 |
+| `/FlappyBird/`、`/mz-corner/` | 302 → `<该路径>/FlappyBird/index.html` | 索引文件是**带目录的相对路径**，被拼在请求路径后 |
+| 任意不存在的路径 | 200 密码生成器页 | 404 页面被设成 `password_tools/index.html`（官方行为：404 转发会把状态码转成 200） |
+
+**把索引文件改成 `index.html`（去掉 `FlappyBird/` 前缀）**，一次解决所有目录形式：
+
+- `/` → 根 `index.html` = 博客 ✓（地址栏保持干净，无 `index.html` 尾巴）
+- `/FlappyBird/` → `/FlappyBird/index.html` ✓、`/password_tools/` ✓（顺带把另外两个项目也救干净）
+
+> **这个服务空间不是博客独占**：根 `index.html` 现在归博客，Flappy Bird 退到 `/FlappyBird/index.html`
+> （文件都在，未丢失）。改索引文件后 `/FlappyBird/` 一样能直达。
+
+> **`base` 为什么保持相对 `./`**：根目录部署时 `./assets/…` 解析成 `/assets/…` ✓ 正确（资源也在根）。
+> 若将来改放到子目录（如 `--prefix mz-corner/`），必须同时把 `client/vite.config.ts` 的 `base` 改成
+> 绝对路径 `/mz-corner/`——因为索引文件是**重写**而非跳转，浏览器地址栏不变，相对路径会解析错、资源 404。
 
 > 若把前端也部署在同一台服务器/同源路径下，`VITE_API_BASE` 留空即可（默认相对路径 `./api/blog`）。
 
