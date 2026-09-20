@@ -50,3 +50,8 @@ uniCloud-*/
 
 # ── 构建缓存 ──
 *.tsbuildinfo
+
+# ── HBuilderX / uniCloud 部署宿主（账号相关，本地自备，见 deploy/unicloud/README.md）──
+/manifest.json
+/.hbuilderx/
+/unpackage/

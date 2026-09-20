@@ -40,14 +40,14 @@ mz-corner-api/
 └── nitro/        Nitro 产物（aws-lambda 预设，纯 handler 无监听器）
 ```
 
-`package.json` 里的 `cloudfunction-config` 会在上传时写入云端配置：
+`package.json` 里的 `cloudfunction-config` 会在上传时随包带到服务端：
 
 | 字段 | 值 | 说明 |
 |---|---|---|
 | `runtime` | `Nodejs18` | 支付宝云默认即 Nodejs18；**只在第一次上传时生效**，之后改需删掉云端函数重新上传 |
-| `path` | `/mz-api` | 云函数 URL 化路径（省去控制台手填） |
 | `timeout` | `20` | 默认仅 5 秒，冷启动 + 网关往返容易踩到；上限 120 秒 |
 | `memorySize` | `512` | 支付宝云默认 512MB |
+| `path` | `/mz-api` | ⚠️ **不负责 URL 化路径**，实测上传后网关仍报 50002（路由未注册）。URL 化路径必须在 Web 控制台配，见「步骤 4」 |
 
 > 说明：`pnpm run pack` 产出的是平台托管用的 `node-listener` 预设，不含可调用入口，
 > 不能直接放进云函数；`build:unicloud` 用 `aws-lambda` 预设产出纯 `handler`。
@@ -95,11 +95,15 @@ uniCloud-alipay/cloudfunctions/mz-corner-api/
 
 | 方案 | 做法 | 代价 |
 |---|---|---|
-| A. 给仓库根补 manifest.json | 从任意 uni-app 项目拷一个 appid，写到仓库根 `manifest.json`（该文件已 gitignore） | 仓库根会被 HBuilderX 当成 uni-app 项目 |
-| **B. 用一个 uni-app 项目做部署宿主（推荐）** | HBuilderX 新建 uni-app 项目 + 勾选启用 uniCloud + 服务商支付宝云 + 关联已有服务空间；再把 `mz-corner-api` 拷进它的 `uniCloud-alipay/cloudfunctions/` | 部署宿主不在仓库内（云函数本体仍由本仓库脚本生成） |
+| **A. 给项目根补 manifest.json（实测可用）** | 从任意 uni-app 项目拷一个 `manifest.json`（带 `appid`）到项目根，再点关联 | 项目会被 HBuilderX 当成 uni-app 项目；`appid` 是账号相关文件，建议 gitignore |
+| B. 用一个 uni-app 项目做部署宿主 | HBuilderX 新建 uni-app 项目 + 勾选启用 uniCloud + 服务商支付宝云 + 关联已有服务空间；再把 `mz-corner-api` 拷进它的 `uniCloud-alipay/cloudfunctions/` | 部署宿主不在仓库内（云函数本体仍由本仓库脚本生成） |
 
-方案 B 就是 DCloud 的官方流程（新建项目时云端分配 appid，顺带把服务空间关联好），
-不会再撞这类未文档化的墙。
+方案 A 实测路径：拷入 `manifest.json` → 右键云函数 → **上传所有云函数、公共模块及Actions**
+（或单函数「上传部署」）→ 控制台输出「云函数 mz-corner-api 上传完成」即成功。
+注意上传成功 ≠ 能访问，URL 化路由还得单独配，见「步骤 4」。
+
+> 另：HBuilderX 控制台会提示「已支持通过命令行 cli 部署 uniCloud 资源」——
+> 那个 CLI **仅支持 Linux**（官方文档原文：仅适用于 linux 命令行调用），Windows 上无法用。
 
 > 产物里已带 `node_modules`（约 1.6MB），选「上传部署」即可，不必用「云端安装依赖」。
 > 若 HBuilderX 提示依赖未安装，忽略即可（我们不打 npm 安装，依赖随产物一起上传）。
@@ -130,10 +134,18 @@ uniCloud-alipay/cloudfunctions/mz-corner-api/
 > 切忌把 `WPS_TRANSPORT` 留空或写成 `cli`：云函数里既没有 `/bin/sh` 也没有 CLI 二进制，
 > 所有 `/api/blog/*` 会直接 500（日志里是 `spawn /bin/sh ENOENT`）。
 
-## 步骤 4：开启云函数 URL 化
+## 步骤 4：配置云函数 URL 化（必须手动，在 Web 控制台）
 
-产物 `package.json` 里已写 `cloudfunction-config.path = "/mz-api"`，上传时会一并写入云端，
-一般无需再去控制台手填。上传后到 **控制台 → 云函数 → `mz-corner-api` → 详情** 确认 URL 化地址存在，形如：
+> ⚠️ 实测确认：`cloudfunction-config.path` **不会**替你配 URL 化路由。
+> 云函数上传成功（控制台日志「上传完成」）后，网关仍报 `50002 函数请求不合法 / 函数路由未配置`。
+> 官方文档也明确：「在 uniCloud Web 控制台进行 URL 化配置」。
+
+1. 登录 [uniCloud 后台](https://unicloud.dcloud.net.cn/)，选择服务空间 `<unicloud-space-id>`
+2. 左侧菜单【云函数】
+3. 找到 `mz-corner-api` → 点【详情】→ 配置访问路径 = `/mz-api` → 保存
+4. 若仍报 `50002` 并提示「HTTP访问服务开关」：到 **环境管理 → 访问服务** 打开 **HTTP 访问服务**
+
+配好后 URL 形如：
 
 | 云商 | URL 化默认域名 |
 |---|---|
@@ -147,9 +159,13 @@ uniCloud-alipay/cloudfunctions/mz-corner-api/
 https://<unicloud-space-id>.api-hz.cloudbasefunction.cn/mz-api
 ```
 
-> 前缀剥离行为各家不一致（有的传 `event.path` 已去前缀，有的仍带前缀），
-> 适配层已做幂等剥离，两种形态都能正确路由；若你改了控制台里的前缀，
-> 记得同步设 `UNICLOUD_URL_PREFIX`。
+> **前缀剥离行为**（官方文档明确）：`event.path` 是「以配置的 url 化路径为根路径」的访问路径。
+> 配 `/mz-api` 后访问 `/mz-api/api/blog/posts`，云函数收到的 `event.path` 是 `/api/blog/posts`。
+> 适配层做了幂等剥离，两种形态（带前缀/不带前缀）都能正确路由；
+> 若你改了控制台里的前缀，记得同步设 `UNICLOUD_URL_PREFIX`。
+>
+> 支付宝云限制（官方文档）：请求与响应 Body 上限均为 32MB；
+> 默认域名存在**全空间共享**的限流池，正式用建议绑自定义域名。
 
 ## 步骤 5：构建并上传前端
 
@@ -210,13 +226,13 @@ transport 未生效、URL 前缀不匹配）。全部通过后浏览器打开静
 
 | 现象 | 原因 | 处理 |
 |---|---|---|
-| 500 + `50002` / `请先检查[环境管理-访问服务]中的HTTP访问服务开关` | 支付宝云网关层：云函数未部署、URL 化路由未生效，或空间的 HTTP 访问服务未开启 | 先在 HBuilderX 上传云函数；仍报错则到「环境管理 → 访问服务」开启 HTTP 访问服务 |
+| 500 + `50002` / `请先检查[环境管理-访问服务]中的HTTP访问服务开关` | 支付宝云网关层：云函数未部署、URL 化路由未生效，或空间的 HTTP 访问服务未开启 | ① HBuilderX 上传云函数；② **Web 控制台 → 云函数 → 详情 → 配访问路径 `/mz-api`**（这步必须手动，`cloudfunction-config.path` 不生效）；③ 仍报错则到「环境管理 → 访问服务」开启 HTTP 访问服务 |
 | 500 + `spawn /bin/sh ENOENT` | transport 仍是 `cli`（变量没配、名字写错） | 确认 `WPS_TRANSPORT=http` 已生效 |
 | 500 + `WPS 工具调用失败: code=401 Unauthorized` | 令牌失效 / 未授权 | 重走 auth-guide，更新 `WPS_API_TOKEN`（必要时同时更新 `WPS_REQUEST_SOURCE_ENC`、`WPS_CLIENT_ID`） |
 | 500 + `HTTP 传输需要 WPS_API_TOKEN 环境变量` | 令牌变量没配或名字写错 | 检查变量名与作用域（要配在 `mz-corner-api` 上） |
 | 接口 200 但列表恒为空 | 旧版本会静默吞掉网关失败码 | 重新构建并上传（当前版本已改为抛错，不再静默返回空） |
 | 前端报 CORS | `CORS_ORIGIN` 与静态站域名不一致，或未配安全域名 | 云函数「安全域名」里放行前端域名，并把 `CORS_ORIGIN` 改成静态站实际域名（或留空为 `*`） |
-| 全部 404 | URL 化前缀与请求路径不匹配 | 确认 `cloudfunction-config.path` 为 `/mz-api`，或同步设 `UNICLOUD_URL_PREFIX` |
+| 全部 404 | URL 化前缀与请求路径不匹配 | 核对控制台里配的访问路径与请求 URL 前缀是否一致（本项目为 `/mz-api`），不一致时同步设 `UNICLOUD_URL_PREFIX` |
 | 首次调用超时 / 504 | 云函数超时默认仅 5 秒 | 产物已设 `timeout: 20`；若改过，在控制台调大 |
 
 本地自检（无需真实令牌，验证产物能否加载、路由与 CORS 是否正常）：
