@@ -139,8 +139,9 @@ cd client && rm -rf dist && VITE_API_BASE=<URL化地址> pnpm run build && cd ..
 ```
 
 线上入口：<https://<unicloud-space-id>-static.normal.cloudstatic.cn/>
-（根域名直达需在控制台把静态站点「索引文件」由 `FlappyBird/index.html` 改成 `index.html`；
-改之前用 `/index.html` 访问。详见部署文档「步骤 6」）
+（`/` 会 302 到 `/index.html`——该托管的「索引文件」是路径语义，这个尾巴消不掉，已实测接受。
+控制台静态站点「索引文件」须为 `index.html`，填带目录的路径会把 `/FlappyBird/`、`/password_tools/`
+一起拼坏。详见部署文档「步骤 6」）
 
 云函数 `package.json` 的 `cloudfunction-config` 已声明 `runtime: Nodejs18`、`path: /mz-api`
 （URL 化前缀）、`timeout: 20`；部署后用只读自检脚本验证：

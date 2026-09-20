@@ -322,60 +322,42 @@ cd ..
 **线上地址**：
 
 ```
-https://<unicloud-space-id>-static.normal.cloudstatic.cn/            ← 根域名直达（需先改控制台一处，见下）
-https://<unicloud-space-id>-static.normal.cloudstatic.cn/index.html  ← 改配置前也能用
+https://<unicloud-space-id>-static.normal.cloudstatic.cn/                        → 302 → /index.html（博客）
+https://<unicloud-space-id>-static.normal.cloudstatic.cn/FlappyBird/index.html
+https://<unicloud-space-id>-static.normal.cloudstatic.cn/password_tools/index.html
 ```
 
 项目使用 `HashRouter`，所有路由都在 `#/` 之后，因此不需要配置 SPA fallback。
 
-### 控制台必须改一处：「索引文件」
+### 控制台必须有一处配置：「索引文件」= `index.html`
 
-`/` 返回什么，**由支付宝云静态站点的「索引文件」配置决定，不是由根目录里有没有 `index.html` 决定**
+`/` 返回什么**由支付宝云静态站点的「索引文件」配置决定，不是由根目录里有没有 `index.html` 决定**
 （官方文档：索引文件默认 `index.html`，且**支持自定义路径**；访问域名时按 `域名 + 索引路径/索引文件` 路由）。
-实测该空间现状为 索引文件 = `FlappyBird/index.html`、404 页面 = `password_tools/index.html`：
+它同时决定**所有目录形式请求**的落点——取值是**带目录的相对路径**时会被拼在请求路径后面：
 
-| 请求 | 实测结果 | 原因 |
-|---|---|---|
-| `/` | 302 → `/FlappyBird/index.html` | 索引文件配置指向 FlappyBird |
-| `/index.html` | 200 博客 ✓ | 精确命中文件 |
-| `/FlappyBird/`、`/mz-corner/` | 302 → `<该路径>/FlappyBird/index.html` | 索引文件是**带目录的相对路径**，被拼在请求路径后 |
-| 任意不存在的路径 | 200 密码生成器页 | 404 页面被设成 `password_tools/index.html`（官方行为：404 转发会把状态码转成 200） |
+| 索引文件取值 | `/` | `/FlappyBird/` | `/password_tools/` |
+|---|---|---|---|
+| `index.html`（**正确值**） | 302 → `/index.html` ✓ 博客 | 302 → `/FlappyBird/index.html` ✓ | 302 → `/password_tools/index.html` ✓ |
+| `FlappyBird/index.html`（曾误设） | 302 → `/FlappyBird/index.html` | 302 → `/FlappyBird/FlappyBird/index.html` ✗ | 302 → `/password_tools/FlappyBird/index.html` ✗ |
+| `mz-corner/index.html`（曾试） | 302 → `/mz-corner/index.html` | 302 → `/FlappyBird/mz-corner/index.html` ✗ | 302 → `/password_tools/mz-corner/index.html` ✗ |
 
-**把索引文件改成 `index.html`（去掉 `FlappyBird/` 前缀）**，一次解决所有目录形式：
+**所以索引文件必须填 `index.html`**：既让 `/` 落到博客，也让另外两个项目各自解析自己的 index。
 
-- `/` → 根 `index.html` = 博客 ✓（地址栏保持干净，无 `index.html` 尾巴）
-- `/FlappyBird/` → `/FlappyBird/index.html` ✓、`/password_tools/` ✓（顺带把另外两个项目也救干净）
+> **`/` 落地会带 `/index.html` 尾巴，消不掉（已实测并接受）**：托管把索引文件当**路径**用，
+> 访问 `/` 时 CDN 先 302 到该路径，地址栏跟着变。曾推测「索引文件指向子目录 → `/` 内部渲染、
+> 地址栏干净」——**实测为假**（那次看到的 200 是边缘缓存的旧响应），改成子目录取值后反而把
+> 所有目录请求拼坏。想让 `/` 真正干净，只能换支持内部渲染的静态托管（GitHub Pages 等）
+> 或绑自定义域名（能否免跳转未知）。
 
 > **这个服务空间不是博客独占**：根 `index.html` 现在归博客，Flappy Bird 退到 `/FlappyBird/index.html`
-> （文件都在，未丢失）。改索引文件后 `/FlappyBird/` 一样能直达。
+> （文件都在，未丢失）。
 
-### 两种部署形态（`base` 必须跟着走）
-
-| 部署位置 | 上传命令 | 构建 base | 索引文件该填 |
-|---|---|---|---|
-| 云空间根目录（当前） | 省略 `--prefix` | 默认 `./`（相对） | `index.html` |
-| 子目录 `mz-corner/` | `--prefix mz-corner/` | `VITE_BASE=/mz-corner/`（绝对） | `mz-corner/index.html` |
-
-**为什么要分两种**：托管的「索引文件」是**路径**语义，不是重写规则——实测两种取值的表现不同：
-
-| 索引文件取值 | 访问 `/` 的表现 |
-|---|---|
-| `index.html`（根下） | **302 → `/index.html`**，地址栏出现 `index.html` 尾巴 |
-| `FlappyBird/index.html`（子目录） | **200 直接出内容、地址栏保持 `/`**（无尾巴） |
-
-所以「地址栏干净」要靠子目录形态；而子目录形态下 `/` 渲染的是 `mz-corner/index.html`，
-相对路径 `./assets/…` 会按 `/assets/…` 解析 → 404，**必须用绝对 `base`**。
-
-> **坑：Git Bash 会把 `VITE_BASE=/mz-corner/` 当路径转换**（MSYS 路径转换），产物里会写进
-> `C:\Users\…\mz-corner\assets\…` 这种**本地文件路径**，部署后页面白屏（实测踩到）。
-> 必须：
->
-> ```bash
-> cd client
-> rm -rf dist
-> MSYS_NO_PATHCONV=1 VITE_BASE=/mz-corner/ VITE_API_BASE=<URL化地址> pnpm run build
-> grep -o 'src="[^"]*"' dist/index.html | grep -v 'src="data:'   # 必须看到 /mz-corner/assets/…
-> ```
+> **不要再动 `base`**：根目录部署用默认相对 `./`（资源与 index.html 同级 → 解析成 `/assets/…` ✓）。
+> `client/vite.config.ts` 保留了 `VITE_BASE` 覆盖能力，只在未来换托管平台、真要放子目录时才用：
+> `MSYS_NO_PATHCONV=1 VITE_BASE=/mz-corner/ pnpm run build`。
+> **Git Bash 的 MSYS 路径转换坑**：不设 `MSYS_NO_PATHCONV=1` 时 `/mz-corner/` 会被转成
+> `C:\…\mz-corner`，产物里写进本地绝对路径、部署后白屏（实测踩到）。构建后务必用
+> `grep -o 'src="[^"]*"' dist/index.html | grep -v 'src="data:'` 确认引用形态。
 
 > 若把前端也部署在同一台服务器/同源路径下，`VITE_API_BASE` 留空即可（默认相对路径 `./api/blog`）。
 
