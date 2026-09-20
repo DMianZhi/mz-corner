@@ -161,13 +161,25 @@ pnpm run deploy:unicloud -- --skip-build  # 复用现有产物，只做上传 + 
 > 连带影响：README 里「云主机 + `WPS_SID` + `cli`」的方案 A 对当前账号同样不通——
 > CLI 续签走的也是这个端点（实测现有密钥链令牌已失效，调用返回 401，续签即撞 403）。
 >
-> **个人 WPS 账号实测可用**（换号后重走一次即可）：
+> **个人账号能签发，但令牌是「会话绑定」的——这条路不能用于服务器端（实测，决定性）**：
 > `POST https://api.wps.cn/office/v5/ai/skill_hub/token/create`，`Cookie: wps_sid=<个人账号 sid>`
-> → `{"code":200,"data":{"token":"...","expires_in":31535956}}`（约 365 天，不是短会话）。
-> 拿这个 token 打网关（`Authorization: Bearer <token>`，`x-client-id` / `x-request-source-enc` 可不填）
-> 能正常列该账号自己的云盘，说明通道完全可用。
-> **唯一剩下的坑是文件权限**：个人账号读企业账号名下的表会回
-> `{"code":400100,"message":"第三方服务错误：无权限"}`，必须把表**共享给该个人账号**。
+> → `{"code":200,"data":{"token":"...","expires_in":31535956}}`。
+> `expires_in` 看着是一年，**但实际寿命跟 sid 会话同生共死**：签发后确实能用
+>（实测列云盘、建多维表都成功），可一旦个人 `wps_sid` 会话结束，
+> 同一令牌立刻回 `401 Unauthorized`，此时再调 `token/create` 得到
+> `HTTP 401 {"code":200,"msg":"no login"}`，而 `365.kdocs.cn` 也回 `{"result":"userNotLogin"}`。
+> ⇒ **不要把 `WPS_API_TOKEN` 当成长期凭据部署**；浏览器会话一断，线上就 500。
+> 另外网关用 `Cookie: wps_sid=<企业账号>` 直接请求会回 `403001`，原文：
+> 「当前登录账号为 WPS 企业账号，当前产品暂仅支持个人账号使用……企业用户请使用 WPS365 CLI」。
+> 拿个人账号读企业账号名下的表另有一道权限墙：`{"code":400100,"message":"第三方服务错误：无权限"}`。
+>
+> **企业账号的正确工具是官方 WPS365 CLI**（`github.com/wps365-open/cli`，MIT，Go 二进制）：
+> `irm https://open-docs.wpscdn.cn/cli/install.ps1 | iex`，或直接取 CDN 上的
+> `releases/download/v0.3.6/wps365-cli-x86_64-pc-windows-gnu.zip` 解压即用。
+> `config init`（浏览器建/绑应用）→ `auth login --device`（设备码授权）→ `user me` 验证。
+> 实测它能**直接读到企业多维表**（`dbsheet records list <file-id> <sheet-id> --page-size 200 --max-records 500 --show-fields-info -o json`），
+> 即 `wps365` 通道的数据链路本身是通的，缺的只是可长期刷新的应用凭据。
+> 注意 `--dry-run` 对 `auth refresh` 无效（照样发真实请求）。
 
 两个通道都可能用到的：
 
