@@ -79,33 +79,51 @@ function toNitroEvent(event = {}) {
   };
 }
 
+/**
+ * uniCloud 集成响应包装。
+ *
+ * 必须带 mpserverlessComposedResponse: true —— 否则 uniCloud 会把整个对象
+ * 当成普通 JSON body 返回，HTTP 状态码恒为 200。实测现象：函数返回
+ * {statusCode:500,...} 时，客户端收到的是 200 + 这段 JSON 原文。
+ * 文档：云函数 URL 化 → url化返回值 → 返回集成响应。
+ */
+function composedResponse({ statusCode = 200, headers = {}, body = '', isBase64Encoded = false } = {}) {
+  return {
+    mpserverlessComposedResponse: true,
+    isBase64Encoded: Boolean(isBase64Encoded),
+    statusCode,
+    headers,
+    body: typeof body === 'string' ? body : JSON.stringify(body),
+  };
+}
+
 exports.main = async (event, context) => {
   const method = (event && event.httpMethod ? event.httpMethod : 'GET').toUpperCase();
   const cors = corsHeaders();
 
   // 浏览器预检：直接短路，不进入业务逻辑
   if (method === 'OPTIONS') {
-    return { statusCode: 204, headers: cors, body: '' };
+    return composedResponse({ statusCode: 204, headers: cors });
   }
 
   try {
     const handler = await loadHandler();
     const result = await handler(toNitroEvent(event), context);
-    return {
+    return composedResponse({
       statusCode: result.statusCode || 200,
       headers: { ...(result.headers || {}), ...cors },
       body: result.body || '',
-      isBase64Encoded: Boolean(result.isBase64Encoded),
-    };
+      isBase64Encoded: result.isBase64Encoded,
+    });
   } catch (error) {
     console.error('[mz-corner-api] 处理失败:', error && error.stack ? error.stack : error);
-    return {
+    return composedResponse({
       statusCode: 500,
       headers: { 'content-type': 'application/json', ...cors },
       body: JSON.stringify({
         code: 1,
         message: error && error.message ? error.message : '服务异常',
       }),
-    };
+    });
   }
 };

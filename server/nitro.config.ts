@@ -5,6 +5,14 @@ config()
 
 export default defineNitroConfig({
   compatibilityDate: '2026-04-23',
+  // consola 在 server/package.json 的 dependencies 里，Nitro 默认把它外置（external）。
+  // 而云函数目录不带 node_modules（也不该带），必须内联进产物，
+  // 否则云端报：Cannot find package 'consola' imported from /var/task/code/nitro/index.mjs。
+  // 本地跑得通是因为 Node 会向上找到仓库的 node_modules——所以本地通过 ≠ 云端可用，
+  // build:unicloud 里另有一道裸导入扫描守住这个不变量。
+  externals: {
+    inline: ['consola'],
+  },
   publicAssets: [
     {
       dir: '../client/dist',

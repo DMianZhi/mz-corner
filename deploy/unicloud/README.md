@@ -149,15 +149,21 @@ uniCloud-alipay/cloudfunctions/mz-corner-api/
 
 | 云商 | URL 化默认域名 |
 |---|---|
-| 支付宝云 | `https://{spaceId}.api-hz.cloudbasefunction.cn/{path}` |
+| 支付宝云 | `https://{spaceId}.dev-hz.cloudbasefunction.cn/{path}` |
 | 阿里云 | `https://{spaceId}.bspapp.com/{path}` |
 | 腾讯云 | `https://{spaceId}.service.tcloudbase.com/{path}` |
 
 本项目实际使用（支付宝云，spaceId `<unicloud-space-id>`）：
 
 ```
-https://<unicloud-space-id>.api-hz.cloudbasefunction.cn/mz-api
+https://<unicloud-space-id>.dev-hz.cloudbasefunction.cn/mz-api
 ```
+
+> ⚠️ **别把 `dev-hz` 和 `api-hz` 搞混**（实测踩过）：
+> `dev-hz.cloudbasefunction.cn` 才是 URL 化（HTTP 访问）域名；
+> `api-hz.cloudbasefunction.cn` 是云函数**调用**域名（`uni.request` / `callFunction`），
+> 打到 `api-hz` 上会得到网关 `50002 函数请求不合法`，看起来很像「函数没传上去」。
+> 以控制台「云函数 → 详情 → 云函数URL化」里显示的域名为准。
 
 > **前缀剥离行为**（官方文档明确）：`event.path` 是「以配置的 url 化路径为根路径」的访问路径。
 > 配 `/mz-api` 后访问 `/mz-api/api/blog/posts`，云函数收到的 `event.path` 是 `/api/blog/posts`。
@@ -171,7 +177,7 @@ https://<unicloud-space-id>.api-hz.cloudbasefunction.cn/mz-api
 
 ```bash
 cd client
-VITE_API_BASE=https://<unicloud-space-id>.api-hz.cloudbasefunction.cn/mz-api pnpm run build
+VITE_API_BASE=https://<unicloud-space-id>.dev-hz.cloudbasefunction.cn/mz-api pnpm run build
 ```
 
 把 `client/dist` 全部文件上传到 **前端网页托管**，两种方式任选：
@@ -199,13 +205,46 @@ VITE_API_BASE=https://<unicloud-space-id>.api-hz.cloudbasefunction.cn/mz-api pnp
 
 ```bash
 node scripts/verify-unicloud-deploy.mjs \
-  https://<unicloud-space-id>.api-hz.cloudbasefunction.cn/mz-api \
+  https://<unicloud-space-id>.dev-hz.cloudbasefunction.cn/mz-api \
   https://<前端网页托管域名>
 ```
 
 它会依次探测 `config` / `posts` / CORS 预检，并把失败原因翻译成处置建议（如令牌失效、
-transport 未生效、URL 前缀不匹配）。全部通过后浏览器打开静态站，确认首页项目、
-文章列表、文章详情、评论提交均正常。
+transport 未生效、URL 前缀不匹配、产物缺依赖、集成响应未被网关还原）。
+全部通过后浏览器打开静态站，确认首页项目、文章列表、文章详情、评论提交均正常。
+
+本地不想联网时，可用 harness 模拟 uniCloud 事件：
+
+```bash
+node scripts/local-unicloud-harness.mjs            # 默认 8899，模拟平台已剥离前缀
+node scripts/verify-unicloud-deploy.mjs http://127.0.0.1:8899/mz-api
+```
+
+harness 默认把产物**拷到仓库外的临时目录**再加载。这是故意的：否则 Node 会沿目录树
+向上找到仓库的 `node_modules`，把「云端缺依赖」这类问题掩盖掉（实测踩过 `consola`）。
+加 `--in-place` 可就地加载，仅供调试。
+
+## 两个实测踩过的坑
+
+### 1. 云函数产物必须自包含
+
+云函数目录里**没有**（也不该有）仓库的 `node_modules`，因此任何被 Nitro 外置的依赖
+都会在云端变成 `Cannot find package 'xxx'`。
+
+- 本地跑得通 ≠ 云端可用：Node 会沿目录树向上找到仓库的 `node_modules`（harness 已默认隔离运行）
+- `consola` 是 `server/package.json` 的直接依赖，Nitro 默认外置 → 已在 `server/nitro.config.ts`
+  的 `externals.inline` 里内联
+- `build:unicloud` 现在会扫描产物：凡是从引用方出发解析不到产物内部的裸导入，直接构建失败
+  （Nitro trace 拷进 `nitro/node_modules/` 的依赖会正常通过）
+
+### 2. 集成响应必须带 `mpserverlessComposedResponse: true`
+
+uniCloud 云函数要返回 `{ statusCode, headers, body }` 这种「集成响应」时，
+**必须**同时带 `mpserverlessComposedResponse: true`，否则网关会把整个对象当普通 JSON body
+返回、HTTP 状态码恒为 200。
+
+实测现象：函数内部返回 500，客户端收到的是 `HTTP 200` + `{"statusCode":500,"headers":{...},"body":"..."}`，
+症状极具误导性（像是「接口通了但数据不对」）。适配层已统一经 `composedResponse()` 包装。
 
 ## 注意事项
 
@@ -226,7 +265,9 @@ transport 未生效、URL 前缀不匹配）。全部通过后浏览器打开静
 
 | 现象 | 原因 | 处理 |
 |---|---|---|
-| 500 + `50002` / `请先检查[环境管理-访问服务]中的HTTP访问服务开关` | 支付宝云网关层：云函数未部署、URL 化路由未生效，或空间的 HTTP 访问服务未开启 | ① HBuilderX 上传云函数；② **Web 控制台 → 云函数 → 详情 → 配访问路径 `/mz-api`**（这步必须手动，`cloudfunction-config.path` 不生效）；③ 仍报错则到「环境管理 → 访问服务」开启 HTTP 访问服务 |
+| 500 + `50002` / `请先检查[环境管理-访问服务]中的HTTP访问服务开关` | 支付宝云网关层：云函数未部署、URL 化路由未生效，或空间的 HTTP 访问服务未开启；也可能是打到了 `api-hz`（调用域名）而非 `dev-hz`（URL 化域名） | ① HBuilderX 上传云函数；② **Web 控制台 → 云函数 → 详情 → 配访问路径 `/mz-api`**（这步必须手动，`cloudfunction-config.path` 不生效）；③ 仍报错则到「环境管理 → 访问服务」开启 HTTP 访问服务；④ 核对域名用控制台里显示的那个 |
+| 500 + `Cannot find package 'xxx'` | 产物不自包含（依赖被外置，而云函数目录不带 node_modules） | 重新 `pnpm run build:unicloud`（已加自包含检查，会直接构建失败并列出缺失包）后重新上传云函数 |
+| 客户端收到 **HTTP 200** 但 body 是 `{"statusCode":500,...,"body":"..."}` | 云函数返回的集成响应未被网关还原——缺 `mpserverlessComposedResponse: true` | 更新到最新产物并重新上传云函数（适配层已统一包装） |
 | 500 + `spawn /bin/sh ENOENT` | transport 仍是 `cli`（变量没配、名字写错） | 确认 `WPS_TRANSPORT=http` 已生效 |
 | 500 + `WPS 工具调用失败: code=401 Unauthorized` | 令牌失效 / 未授权 | 重走 auth-guide，更新 `WPS_API_TOKEN`（必要时同时更新 `WPS_REQUEST_SOURCE_ENC`、`WPS_CLIENT_ID`） |
 | 500 + `HTTP 传输需要 WPS_API_TOKEN 环境变量` | 令牌变量没配或名字写错 | 检查变量名与作用域（要配在 `mz-corner-api` 上） |

@@ -4,14 +4,18 @@
  *
  * 用法：
  *   node scripts/verify-unicloud-deploy.mjs
- *   node scripts/verify-unicloud-deploy.mjs https://<spaceId>.api-hz.cloudbasefunction.cn/mz-api
+ *   node scripts/verify-unicloud-deploy.mjs https://<spaceId>.dev-hz.cloudbasefunction.cn/mz-api
  *   node scripts/verify-unicloud-deploy.mjs <baseUrl> https://<前端网页托管域名>
+ *
+ * 注意域名：支付宝云 URL 化域名是 dev-hz.cloudbasefunction.cn，
+ * api-hz.cloudbasefunction.cn 是云函数调用（uni.request/callFunction）域名，
+ * 两者不通用——打到 api-hz 会得到网关 50002。
  *
  * 第二个参数（前端域名）用于校验 CORS：跨域部署时前端域名必须出现在
  * 云函数的「安全域名」配置里，同时要与云函数环境变量 CORS_ORIGIN 一致。
  */
 
-const DEFAULT_BASE = "https://<unicloud-space-id>.api-hz.cloudbasefunction.cn/mz-api";
+const DEFAULT_BASE = "https://<unicloud-space-id>.dev-hz.cloudbasefunction.cn/mz-api";
 
 const positional = process.argv.slice(2).filter((arg) => !arg.startsWith("-"));
 const baseUrl = (positional[0] || process.env.DEPLOY_BASE_URL || DEFAULT_BASE).replace(/\/+$/, "");
@@ -50,7 +54,11 @@ function diagnose(response) {
   }
   const body = response.text || "";
   if (/50002|HTTP访问服务/.test(body)) {
-    return "支付宝云网关 50002：云函数未部署或 URL 化路由未生效——先在 HBuilderX 上传云函数；仍报错则确认「环境管理 → 访问服务」的 HTTP 访问服务已开启";
+    return "支付宝云网关 50002：云函数未部署 / URL 化路由未生效 / HTTP 访问服务未开启。依次确认：① HBuilderX 上传云函数；② 控制台「云函数 → 详情 → 配置访问路径」= /mz-api；③ 「环境管理 → 访问服务」开启 HTTP 访问服务。另：URL 化域名是 dev-hz（api-hz 是云函数调用域名，打到那边必然 50002）";
+  }
+  if (/Cannot find package/.test(body)) {
+    const pkg = body.match(/Cannot find package '([^']+)'/)?.[1] || "某依赖";
+    return `云函数产物缺依赖（${pkg}）：产物必须自包含，重新执行 pnpm run build:unicloud（已加自包含检查）并重新上传云函数`;
   }
   if (/spawn \/bin\/sh/.test(body)) {
     return "transport 仍为 cli：云函数环境变量 WPS_TRANSPORT=http 未生效";
@@ -81,10 +89,41 @@ function parseJson(text) {
   }
 }
 
+/**
+ * 拆掉「集成响应」信封。
+ *
+ * 云函数返回 { mpserverlessComposedResponse: true, statusCode, headers, body } 时，
+ * uniCloud 网关会把它还原成真正的 HTTP 响应；若缺少该字段，客户端收到的就是
+ * HTTP 200 + 这段 JSON 原文（实测踩过：500 被误读成 200）。
+ * 这里统一拆封后再判定，并把「信封未被还原」单独报出来。
+ */
+function unwrap(response) {
+  const json = parseJson(response.text || "");
+  const looksEnveloped =
+    json &&
+    typeof json === "object" &&
+    typeof json.statusCode === "number" &&
+    Object.prototype.hasOwnProperty.call(json, "body");
+  if (!looksEnveloped) return { ...response, enveloped: false };
+  return {
+    ...response,
+    enveloped: true,
+    status: json.statusCode,
+    text: typeof json.body === "string" ? json.body : JSON.stringify(json.body ?? ""),
+  };
+}
+
 console.log(`\n目标：${baseUrl}${origin ? `\n前端域名：${origin}` : ""}\n`);
 
 /* 1. 站点配置接口 —— 最轻量，用来判断「函数是否活着 + 数据层是否通」 */
-const configRes = await probe("/api/blog/config", { headers: { Accept: "application/json" } });
+const configRes = unwrap(await probe("/api/blog/config", { headers: { Accept: "application/json" } }));
+if (configRes.enveloped) {
+  record(
+    "集成响应信封",
+    false,
+    "网关未还原云函数返回的集成响应（响应是 HTTP 200 + {statusCode,body} JSON）：产物缺 mpserverlessComposedResponse: true，重新 build:unicloud 并重新上传云函数",
+  );
+}
 if (configRes.error || configRes.status !== 200) {
   record("GET /api/blog/config", false, diagnose(configRes));
 } else {
@@ -94,7 +133,7 @@ if (configRes.error || configRes.status !== 200) {
 }
 
 /* 2. 文章列表 —— 校验真实数据链路，顺带看是否有内容 */
-const postsRes = await probe("/api/blog/posts?page=1&pageSize=3", { headers: { Accept: "application/json" } });
+const postsRes = unwrap(await probe("/api/blog/posts?page=1&pageSize=3", { headers: { Accept: "application/json" } }));
 if (postsRes.error || postsRes.status !== 200) {
   record("GET /api/blog/posts", false, diagnose(postsRes));
 } else {
@@ -111,14 +150,14 @@ if (postsRes.error || postsRes.status !== 200) {
 
 /* 3. CORS 预检 —— 静态托管与云函数跨域时必须通过 */
 const preflightOrigin = origin || "https://example.invalid";
-const preflight = await probe("/api/blog/posts", {
+const preflight = unwrap(await probe("/api/blog/posts", {
   method: "OPTIONS",
   headers: {
     Origin: preflightOrigin,
     "Access-Control-Request-Method": "GET",
     "Access-Control-Request-Headers": "content-type",
   },
-});
+}));
 if (preflight.error) {
   record("OPTIONS 预检 (CORS)", false, diagnose(preflight));
 } else {

@@ -10,6 +10,11 @@
  *   node scripts/local-unicloud-harness.mjs                 # 默认 8899 端口，模拟平台已剥离前缀
  *   node scripts/local-unicloud-harness.mjs full 8899       # 模拟平台把 /mz-api 前缀也传进来
  *   node scripts/local-unicloud-harness.mjs stripped 8900
+ *   node scripts/local-unicloud-harness.mjs stripped 8899 --in-place   # 就地加载（仅调试用）
+ *
+ * 隔离：默认把产物拷到仓库外的临时目录再加载。否则 Node 会沿目录树向上找到仓库的
+ * node_modules，把「云端缺依赖」这类问题掩盖掉（实测踩过：本地全绿、上传后 500
+ * Cannot find package 'consola'）。
  *
  * 另一个终端配合自检脚本：
  *   node scripts/verify-unicloud-deploy.mjs http://127.0.0.1:8899/mz-api
@@ -17,21 +22,46 @@
  * 说明：本脚本只做只读转发，不写数据；令牌可用占位值，用来观察失败诊断是否符合预期。
  */
 
+import { rmSync } from "node:fs";
+import { cp, mkdir, rm } from "node:fs/promises";
 import http from "node:http";
 import { createRequire } from "node:module";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const ENTRY = path.join(repoRoot, "deploy/unicloud/cloudfunctions/mz-corner-api/index.js");
+const ARTIFACT = path.join(repoRoot, "deploy/unicloud/cloudfunctions/mz-corner-api");
 const PREFIX = "/mz-api";
 const EMPTY = Object.create(null);
 
-const mode = process.argv[2] === "full" ? "full" : "stripped";
-const port = Number(process.argv[3] || 8899);
+const args = process.argv.slice(2);
+const inPlace = args.includes("--in-place");
+const positional = args.filter((a) => !a.startsWith("--"));
+const mode = positional[0] === "full" ? "full" : "stripped";
+const port = Number(positional[1] || 8899);
 
-const cloudFunction = require(ENTRY);
+const { cloudFunction, entry } = await loadCloudFunction();
+
+async function loadCloudFunction() {
+  if (inPlace) {
+    return { cloudFunction: require(path.join(ARTIFACT, "index.js")), entry: ARTIFACT };
+  }
+  const sandbox = path.join(os.tmpdir(), `mz-corner-api-harness-${process.pid}`);
+  await rm(sandbox, { recursive: true, force: true });
+  await mkdir(sandbox, { recursive: true });
+  await cp(ARTIFACT, sandbox, { recursive: true });
+  const cleanup = () => {
+    try {
+      rmSync(sandbox, { recursive: true, force: true });
+    } catch {
+      // 清理失败不影响结论
+    }
+  };
+  process.on("exit", cleanup);
+  return { cloudFunction: require(path.join(sandbox, "index.js")), entry: sandbox };
+}
 
 const server = http.createServer(async (req, res) => {
   const chunks = [];
@@ -58,6 +88,6 @@ const server = http.createServer(async (req, res) => {
 server.listen(port, () => {
   console.log(`本地 uniCloud 模拟器已启动：http://127.0.0.1:${port}${PREFIX}`);
   console.log(`event.path 形态：${mode === "full" ? "含前缀" : "已剥离"}`);
-  console.log(`适配层：${ENTRY}`);
+  console.log(`适配层：${entry}${inPlace ? "（就地加载，未隔离）" : "（已隔离到仓库外临时目录）"}`);
   console.log(`自检：node scripts/verify-unicloud-deploy.mjs http://127.0.0.1:${port}${PREFIX}`);
 });
