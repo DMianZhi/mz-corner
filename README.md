@@ -116,6 +116,46 @@ cd server && pnpm test    # 业务规则 + 传输解析（20 个用例，含内�
 └── docs/designs/         # DESIGN.md 设计规范
 ```
 
+## 部署
+
+数据层支持两种运行形态，差别只在 `WPS_TOOL_TRANSPORT`：
+
+### 方案 A：传统服务器（transport=cli）
+
+适合任意云主机 / VPS。
+
+```bash
+git clone https://github.com/DMianZhi/mz-corner && cd mz-corner
+pnpm install && pnpm run pack
+cd server && node .output/server/index.mjs      # 默认监听 4917
+```
+
+需要准备：
+- `kdocs-comate-cli` 二进制放入 `PATH`（或设 `WPS_CLI_BIN` 指向绝对路径）
+- `WPS_SID` 写入环境变量（CLI 自行处理令牌交换与刷新）
+- Nginx：`client/dist` 作为静态根，`/api/` 反代到 `127.0.0.1:4917`
+
+### 方案 B：Serverless / 云函数（transport=http）
+
+适合无法执行外部二进制的环境（uniCloud 云函数、Vercel Functions 等）。
+
+```ini
+WPS_TRANSPORT=http
+WPS_API_TOKEN=<工具网关令牌>
+WPS_REQUEST_SOURCE_ENC=<请求签名>
+WPS_CLIENT_ID=<客户端 ID>
+```
+
+该模式直连 `<endpoint>/skill_hub/api/v1/tool`，无需 CLI。
+令牌获取：`https://<endpoint>/kdocs-auth/auth-guide`（浏览器授权，账号登录后回调下发，支持刷新）。
+
+### 两种形态已验证的行为
+
+| 项目 | cli | http |
+|---|---|---|
+| 文章列表 / 项目 / 配置读取 | ✅ | ✅ |
+| 阅读数写回 / 评论创建 | ✅ | ✅ |
+
 ## License
 
 MIT
