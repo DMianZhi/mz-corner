@@ -31,13 +31,6 @@ execFileSync(process.execPath, [nitroCli, "build"], {
   env: { ...process.env, NITRO_PRESET: "aws-lambda" },
 });
 
-// capability 运行时资产（插件模块 + 实例配置）不会被 Nitro 自动打包，需单独注入
-console.log("→ 注入 capability 资产");
-execFileSync(process.execPath, ["scripts/copy-capability-assets.mjs"], {
-  cwd: serverDir,
-  stdio: "inherit",
-});
-
 // 自包含检查：云函数目录不带仓库的 node_modules，产物里的裸导入必须能在产物内解析。
 // 本地跑得通不代表云端可用——Node 会向上找到仓库的 node_modules，
 // 云端只有函数目录，于是直接 Cannot find package（实测踩过 consola）。

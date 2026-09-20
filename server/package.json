@@ -1,21 +1,19 @@
 {
-  "name": "@wps365-open/boilerplate-server",
+  "name": "@mz-corner/server",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
     "postinstall": "nitropack prepare",
     "dev": "nitropack dev --port 4917 --host 0.0.0.0 --qr=false",
-    "build": "cross-env NITRO_PRESET=node nitropack build && node scripts/copy-capability-assets.mjs",
+    "build": "cross-env NITRO_PRESET=node nitropack build",
     "build:standalone": "cross-env NITRO_PRESET=node-server nitropack build",
-    "pack:server": "cross-env NITRO_PRESET=node nitropack build && node scripts/copy-capability-assets.mjs && node ../scripts/zip-dir.mjs .output ../.publish/dist-server.zip .output",
+    "pack:server": "cross-env NITRO_PRESET=node nitropack build && node ../scripts/zip-dir.mjs .output ../.publish/dist-server.zip .output",
     "lint": "oxlint -c ../.oxlintrc.json routes/ utils/ data/ services/ plugins/",
     "check:types": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
-    "@ks-open/capability": "catalog:",
-    "@wps365-open/appbase-js": "catalog:",
     "consola": "^3.4.2",
     "nitropack": "^2"
   },

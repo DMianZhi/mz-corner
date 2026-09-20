@@ -4,15 +4,6 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-catalogs:
-  default:
-    '@ks-open/capability':
-      specifier: latest
-      version: 0.0.66
-    '@wps365-open/appbase-js':
-      specifier: latest
-      version: 0.0.11
-
 importers:
 
   .:
@@ -35,24 +26,12 @@ importers:
       '@base-ui/react':
         specifier: ^1.3.0
         version: 1.8.0(@types/react@19.3.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
-      '@ks-open/capability':
-        specifier: 'catalog:'
-        version: 0.0.66
-      '@wps365-open/appbase-js':
-        specifier: 'catalog:'
-        version: 0.0.11
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
-      crypto-js:
-        specifier: ^4.2.0
-        version: 4.2.0
-      jsencrypt:
-        specifier: ^3.3.2
-        version: 3.5.4
       lucide-react:
         specifier: ^1.7.0
         version: 1.46.0(react@19.3.0)
@@ -84,9 +63,6 @@ importers:
       '@tailwindcss/vite':
         specifier: ^4.2.2
         version: 4.3.3(vite@6.4.3(@types/node@25.9.7)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.51.2))
-      '@types/crypto-js':
-        specifier: ^4.2.2
-        version: 4.2.2
       '@types/node':
         specifier: ^25.9.1
         version: 25.9.7
@@ -126,12 +102,6 @@ importers:
 
   server:
     dependencies:
-      '@ks-open/capability':
-        specifier: 'catalog:'
-        version: 0.0.66
-      '@wps365-open/appbase-js':
-        specifier: 'catalog:'
-        version: 0.0.11
       consola:
         specifier: ^3.4.2
         version: 3.4.2
@@ -704,9 +674,6 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
-  '@ks-open/capability@0.0.66':
-    resolution: {integrity: sha512-JYxzqpLxKJT4I/ajbDpe8h9KR0IpQ4bEwPpCyGF1n6IWPOG7tn3MKoEW0wLlpSqobqIV/bUuFOYRwMnWhu++PQ==}
-
   '@mapbox/node-pre-gyp@2.0.3':
     resolution: {integrity: sha512-uwPAhccfFJlsfCxMYTwOdVfOz3xqyj8xYL3zJj8f0pb30tLohnnFPhLuqp4/qoEz8sNxe4SESZedcBojRefIzg==}
     engines: {node: '>=18'}
@@ -1227,9 +1194,6 @@ packages:
   '@types/chai@5.2.3':
     resolution: {integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==}
 
-  '@types/crypto-js@4.2.2':
-    resolution: {integrity: sha512-sDOLlVbHhXpAUAL0YHDUUwDZf3iN4Bwi4W6a0W0b+QcAezUbRtH4FVb+9J4h+XFPW7l/gQ9F8qC7P+Ec4k8QVQ==}
-
   '@types/deep-eql@4.0.2':
     resolution: {integrity: sha512-c9h9dVVMigMPc4bwTvC5dxqtqJZwQPePsWjPlpSOnojbor6pGqdk541lfA7AqFQr5pB1BRdq0juY9db81BwyFw==}
 
@@ -1292,9 +1256,6 @@ packages:
 
   '@vitest/utils@4.1.11':
     resolution: {integrity: sha512-zTCVGpyFsGWBhllOyKlTw/vnr6D9qxsfSDyfbyZmTyjHw5N/VuvzHpHoQjm2ZJzn4RJgx5w4r7V0er69CmLgPQ==}
-
-  '@wps365-open/appbase-js@0.0.11':
-    resolution: {integrity: sha512-Wc5hjMZOyndBZfEJ9O/jJ7BEzCAb8DvTZoy573U36763gtt+igTwUwZD26K09mVmiV5J9hkAmlz9iKiPCaznWw==}
 
   abbrev@3.0.1:
     resolution: {integrity: sha512-AO2ac6pjRB3SJmGJo+v5/aK6Omggp6fsLrs6wN9bd35ulu4cCwaAU9+7ZhXjeqHVkaHThLuzH0nZr0YpCDhygg==}
@@ -1751,10 +1712,6 @@ packages:
     peerDependenciesMeta:
       srvx:
         optional: true
-
-  crypto-js@4.2.0:
-    resolution: {integrity: sha512-KALDyEYgpY+Rlob/iriUtjV6d5Eq+Y191A5g4UqLAi8CyGP9N1+FdVbkc1SxKc2r4YAYqG8JzO2KGL+AizD70Q==}
-    deprecated: Active development of CryptoJS has been discontinued. This library is no longer maintained.
 
   cssesc@3.0.0:
     resolution: {integrity: sha512-/Tb/JcjK111nNScGob5MNtsntNM1aCNUDipB/TkwZFhyDrrE47SOx/18wF2bbjgc3ZzCSKW1T5nt5EbFoAz/Vg==}
@@ -2534,9 +2491,6 @@ packages:
     resolution: {integrity: sha512-SFNOvSJ+Dgf/9An904Yx+CgSlIPCkIpao4qo51lpee25TIRejdH3rhR4EZMGoNx3/TP3O+wzWuiTFl4sqbltzA==}
     hasBin: true
 
-  jsencrypt@3.5.4:
-    resolution: {integrity: sha512-kNjfYEMNASxrDGsmcSQh/rUTmcoRfSUkxnAz+MMywM8jtGu+fFEZ3nJjHM58zscVnwR0fYmG9sGkTDjqUdpiwA==}
-
   jsesc@3.1.0:
     resolution: {integrity: sha512-/sM3dO2FOzXjKQhJuo0Q173wf2KOo8t4I8vHy6lF9poUp7bKT0/NHE8fPX23PwfhnykfqnC2xRxOnVw5XuGIaA==}
     engines: {node: '>=6'}
@@ -2579,10 +2533,6 @@ packages:
 
   knitwork@1.3.0:
     resolution: {integrity: sha512-4LqMNoONzR43B1W0ek0fhXMsDNW/zxa1NdFAVMY+k28pgZLovR4G3PB5MrpTxCy1QaZCqNoiaKPr5w5qZHfSNw==}
-
-  ky@1.14.3:
-    resolution: {integrity: sha512-9zy9lkjac+TR1c2tG+mkNSVlyOpInnWdSMiue4F+kq8TwJSgv6o8jhLRg8Ho6SnZ9wOYUq/yozts9qQCfk7bIw==}
-    engines: {node: '>=18'}
 
   lazystream@1.0.1:
     resolution: {integrity: sha512-b94GiNHQNy6JNTrt5w6zNyffMrNkXZb3KTkCZJb2V1xaEGCk093vkZ2jk3tpaeP33/OiXC+WvK9AxUebnf5nbw==}
@@ -4521,13 +4471,6 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@ks-open/capability@0.0.66':
-    dependencies:
-      ajv: 8.20.0
-      cookie-es: 2.0.1
-      jose: 6.2.12
-      ky: 1.14.3
-
   '@mapbox/node-pre-gyp@2.0.3':
     dependencies:
       consola: 3.4.2
@@ -4913,8 +4856,6 @@ snapshots:
       '@types/deep-eql': 4.0.2
       assertion-error: 2.0.1
 
-  '@types/crypto-js@4.2.2': {}
-
   '@types/deep-eql@4.0.2': {}
 
   '@types/estree@1.0.9': {}
@@ -5006,8 +4947,6 @@ snapshots:
       '@vitest/pretty-format': 4.1.11
       convert-source-map: 2.0.0
       tinyrainbow: 3.1.1
-
-  '@wps365-open/appbase-js@0.0.11': {}
 
   abbrev@3.0.1: {}
 
@@ -5434,8 +5373,6 @@ snapshots:
       uncrypto: 0.1.3
 
   crossws@0.4.12: {}
-
-  crypto-js@4.2.0: {}
 
   cssesc@3.0.0: {}
 
@@ -6282,8 +6219,6 @@ snapshots:
     dependencies:
       argparse: 2.0.1
 
-  jsencrypt@3.5.4: {}
-
   jsesc@3.1.0: {}
 
   json-parse-better-errors@1.0.2: {}
@@ -6311,8 +6246,6 @@ snapshots:
   klona@2.0.6: {}
 
   knitwork@1.3.0: {}
-
-  ky@1.14.3: {}
 
   lazystream@1.0.1:
     dependencies:
