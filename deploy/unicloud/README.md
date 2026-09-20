@@ -145,24 +145,38 @@ pnpm run deploy:unicloud -- --skip-build  # 复用现有产物，只做上传 + 
 
 ## 步骤 3：配置云函数环境变量
 
-在 uniCloud 控制台 → 云函数 → `mz-corner-api` → 环境变量，添加：
+在 uniCloud 控制台 → 云函数 → `mz-corner-api` → 环境变量。
+**先确定用哪个数据源通道**，两者需要的变量完全不同：
+
+| 通道 | 适用 | 必填变量 |
+|---|---|---|
+| `wps365`（当前默认） | 企业账号（技能渠道 `wps` 对企业账号返回 403） | `WPS365_CLIENT_ID`、`WPS365_CLIENT_SECRET`、`WPS365_REFRESH_TOKEN`（排障可用 `WPS365_ACCESS_TOKEN` 直接给 access_token） |
+| `wps` | 个人账号，走工具网关 | `WPS_TRANSPORT=http`、`WPS_API_TOKEN`、`WPS_REQUEST_SOURCE_ENC`、`WPS_CLIENT_ID` |
+
+两个通道都可能用到的：
 
 | 变量 | 值 |
 |---|---|
-| `WPS_TRANSPORT` | `http` |
-| `WPS_API_TOKEN` | 工具网关令牌 |
-| `WPS_REQUEST_SOURCE_ENC` | 请求签名 |
-| `WPS_CLIENT_ID` | 客户端 ID |
 | `CORS_ORIGIN` | 静态站域名（不填为 `*`） |
 | `UNICLOUD_URL_PREFIX` | URL 化前缀，默认 `/mz-api`（改了控制台前缀才需要设） |
+| `NITRO_BLOG_PROVIDER` | `wps365` / `wps`，运行期切换数据源通道 |
 
-> **变量名语义**（已在本地对构建产物实测）：
-> `WPS_TRANSPORT` 等 `WPS_*` 变量由数据层在**运行期**读取，云函数控制台配置即可生效。
-> 如果你想用 Nitro 原生的 runtimeConfig 覆盖写法，对应名字是 `BLOG_WPS_TRANSPORT`（多一层 `BLOG_` 前缀），
-> 两者等效。
+> **两种变量名都能生效（已对构建产物实测）**：
+> ① 数据层自己的名字（`WPS_*` / `WPS365_*`）——`server/data/config.ts` 在运行期读 `process.env`；
+> ② Nitro runtimeConfig 覆盖名——`NITRO_BLOG_` + 路径（大写下划线），如 `NITRO_BLOG_PROVIDER`、
+> `NITRO_BLOG_WPS_TRANSPORT`、`NITRO_BLOG_WPS365_CLIENT_ID`。
 >
-> 切忌把 `WPS_TRANSPORT` 留空或写成 `cli`：云函数里既没有 `/bin/sh` 也没有 CLI 二进制，
-> 所有 `/api/blog/*` 会直接 500（日志里是 `spawn /bin/sh ENOENT`）。
+> 之所以要留 ②：`nitro.config.ts` 的 `runtimeConfig` 默认值会被**构建期内联进产物**，
+> 运行期再改普通环境变量不会影响 `provider` 这类已内联字段，只有 `NITRO_*` 才能覆盖。
+> 实测：`NITRO_BLOG_PROVIDER=wps` → 日志变 `provider=wps`；
+> 普通 `WPS_TRANSPORT=http` + 占位令牌 → 报 `WPS 工具调用失败: code=401 Unauthorized`（链路已通，只差真令牌）。
+>
+> 用 `wps` 通道时切忌把 `WPS_TRANSPORT` 留空或写成 `cli`：云函数里既没有 `/bin/sh` 也没有
+> CLI 二进制，所有 `/api/blog/*` 会直接 500（日志里是 `spawn /bin/sh ENOENT`）。
+>
+> **怎么确认线上实际用的是哪个通道**：云函数日志里那行
+> `Data source plugin initialized (provider=..., transport=...)`。
+> 配了变量却不见效时，先看这行，再看具体报错。
 
 ## 步骤 4：配置云函数 URL 化（必须手动，在 Web 控制台）
 
@@ -299,7 +313,9 @@ uniCloud 云函数要返回 `{ statusCode, headers, body }` 这种「集成响�
 | 500 + `Cannot find package 'xxx'` | 产物不自包含（依赖被外置，而云函数目录不带 node_modules） | 重新 `pnpm run build:unicloud`（已加自包含检查，会直接构建失败并列出缺失包）后重新上传云函数 |
 | 客户端收到 **HTTP 200** 但 body 是 `{"statusCode":500,...,"body":"..."}` | 云函数返回的集成响应未被网关还原——缺 `mpserverlessComposedResponse: true` | 更新到最新产物并重新上传云函数（适配层已统一包装） |
 | 500 + `spawn /bin/sh ENOENT` | transport 仍是 `cli`（变量没配、名字写错） | 确认 `WPS_TRANSPORT=http` 已生效 |
-| 500 + `WPS 工具调用失败: code=401 Unauthorized` | 令牌失效 / 未授权 | 重走 auth-guide，更新 `WPS_API_TOKEN`（必要时同时更新 `WPS_REQUEST_SOURCE_ENC`、`WPS_CLIENT_ID`） |
+| 500 + `WPS 工具调用失败: code=401 Unauthorized` | `wps` 通道令牌失效 / 未授权 | 重走 auth-guide，更新 `WPS_API_TOKEN`（必要时同时更新 `WPS_REQUEST_SOURCE_ENC`、`WPS_CLIENT_ID`） |
+| 500 + `WPS 365 令牌刷新失败: HTTP 401 ... invalid_client` | `wps365` 通道的 `WPS365_CLIENT_ID` / `WPS365_CLIENT_SECRET` 不对或未配 | 核对开放平台应用的 client_id / client_secret；注意这三个变量在云函数控制台上配，不是本地 |
+| 500 + `未知的数据源 BLOG_DATA_PROVIDER="wps365"，可用值：wps` | 线上跑的是**重构前**的旧产物，注册表里只有 `wps` | `pnpm run deploy:unicloud` 重新构建并上传；在此之前用 `NITRO_BLOG_PROVIDER=wps` 可先维持旧通道 |
 | 500 + `HTTP 传输需要 WPS_API_TOKEN 环境变量` | 令牌变量没配或名字写错 | 检查变量名与作用域（要配在 `mz-corner-api` 上） |
 | 接口 200 但列表恒为空 | 旧版本会静默吞掉网关失败码 | 重新构建并上传（当前版本已改为抛错，不再静默返回空） |
 | 前端报 CORS | `CORS_ORIGIN` 与静态站域名不一致，或未配安全域名 | 云函数「安全域名」里放行前端域名，并把 `CORS_ORIGIN` 改成静态站实际域名（或留空为 `*`） |
