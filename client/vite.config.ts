@@ -30,7 +30,10 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
-    base: "./",
+    // 默认相对路径：适合「传到前端网页托管根目录」的部署（./assets/… → /assets/…）
+    // 若部署到子目录（如 mz-corner/），需 VITE_BASE=/mz-corner/ 生成绝对路径——
+    // 因为托管的「索引文件」是 302 跳转/内部渲染而非可配置重写，相对路径会解析错。
+    base: env.VITE_BASE || "./",
     // gatewayProxy 注册在 proxy 之前：加密环境拦截请求，非加密环境 next() 透传给 proxy
     plugins: [react(), tailwindcss(), tsconfigPaths({ ignoreConfigErrors: true }), devErrorReporter(), gatewayProxy()],
     server: {

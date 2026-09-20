@@ -349,9 +349,33 @@ https://<unicloud-space-id>-static.normal.cloudstatic.cn/index.html  ← 改配�
 > **这个服务空间不是博客独占**：根 `index.html` 现在归博客，Flappy Bird 退到 `/FlappyBird/index.html`
 > （文件都在，未丢失）。改索引文件后 `/FlappyBird/` 一样能直达。
 
-> **`base` 为什么保持相对 `./`**：根目录部署时 `./assets/…` 解析成 `/assets/…` ✓ 正确（资源也在根）。
-> 若将来改放到子目录（如 `--prefix mz-corner/`），必须同时把 `client/vite.config.ts` 的 `base` 改成
-> 绝对路径 `/mz-corner/`——因为索引文件是**重写**而非跳转，浏览器地址栏不变，相对路径会解析错、资源 404。
+### 两种部署形态（`base` 必须跟着走）
+
+| 部署位置 | 上传命令 | 构建 base | 索引文件该填 |
+|---|---|---|---|
+| 云空间根目录（当前） | 省略 `--prefix` | 默认 `./`（相对） | `index.html` |
+| 子目录 `mz-corner/` | `--prefix mz-corner/` | `VITE_BASE=/mz-corner/`（绝对） | `mz-corner/index.html` |
+
+**为什么要分两种**：托管的「索引文件」是**路径**语义，不是重写规则——实测两种取值的表现不同：
+
+| 索引文件取值 | 访问 `/` 的表现 |
+|---|---|
+| `index.html`（根下） | **302 → `/index.html`**，地址栏出现 `index.html` 尾巴 |
+| `FlappyBird/index.html`（子目录） | **200 直接出内容、地址栏保持 `/`**（无尾巴） |
+
+所以「地址栏干净」要靠子目录形态；而子目录形态下 `/` 渲染的是 `mz-corner/index.html`，
+相对路径 `./assets/…` 会按 `/assets/…` 解析 → 404，**必须用绝对 `base`**。
+
+> **坑：Git Bash 会把 `VITE_BASE=/mz-corner/` 当路径转换**（MSYS 路径转换），产物里会写进
+> `C:\Users\…\mz-corner\assets\…` 这种**本地文件路径**，部署后页面白屏（实测踩到）。
+> 必须：
+>
+> ```bash
+> cd client
+> rm -rf dist
+> MSYS_NO_PATHCONV=1 VITE_BASE=/mz-corner/ VITE_API_BASE=<URL化地址> pnpm run build
+> grep -o 'src="[^"]*"' dist/index.html | grep -v 'src="data:'   # 必须看到 /mz-corner/assets/…
+> ```
 
 > 若把前端也部署在同一台服务器/同源路径下，`VITE_API_BASE` 留空即可（默认相对路径 `./api/blog`）。
 
