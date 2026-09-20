@@ -13,5 +13,5 @@
     "resolveJsonModule": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["routes", "middleware", "plugins", "database", "utils", "nitro.config.ts", ".nitro/types/nitro.d.ts"]
+  "include": ["routes", "middleware", "plugins", "database", "utils", "data", "services", "nitro.config.ts", "vitest.config.ts", ".nitro/types/nitro.d.ts"]
 }

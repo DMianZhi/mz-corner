@@ -1,13 +1,17 @@
+import { createError, defineEventHandler, getRouterParam } from "h3";
+import { getArticleById } from "~~/services/blog-service";
+
 /**
  * GET /api/blog/posts/:id
- * 文章详情：按记录 ID 从多维表获取单篇文章（含正文内容）。front page (list) hides content for perf.
+ * 文章详情（含正文）。
  */
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, "id");
   if (!id) {
     throw createError({ statusCode: 400, statusMessage: "Missing post id" });
   }
-  const post = await getArticleFromDb(id);
+
+  const post = await getArticleById(id);
   if (!post) {
     throw createError({ statusCode: 404, statusMessage: "Post not found" });
   }

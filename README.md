@@ -42,15 +42,61 @@ pnpm run pack
 
 ### 环境变量
 
-后端通过 `server/.env` 提供 WPS CLI 认证（已 gitignore，不入库）：
+后端通过 `server/.env` 提供数据源认证（已 gitignore，不入库）：
 
 ```ini
+# WPS 数据源（默认 provider）
 SANDBOX_CREDENTIAL_RESOLVE_AUTH_TOKEN=<token>
 SANDBOX_CREDENTIAL_RESOLVE_URL=<url>
 WPS_SID=<sid>
 ```
 
-数据存储在 WPS 多维表中，通过 `kdocs-comate-cli` 读写，`server/utils/blog-db.ts` 封装了全部数据访问。
+可选配置：
+
+```ini
+BLOG_DATA_PROVIDER=wps      # 数据源实现，默认 wps
+WPS_TOOL_TRANSPORT=cli      # WPS 传输方式：cli（默认，子进程）或 http
+WPS_API_TOKEN=<token>       # 仅 http 传输需要
+```
+
+## 数据层架构
+
+数据访问按「路由 → 业务 → 仓储 → 服务商」四层组织，服务商实现被完全隔离：
+
+```
+routes/api/blog/*.ts        仅 HTTP 语义：参数解析、状态码、错误响应
+        ↓
+services/blog-service.ts    业务规则：筛选、排序、输入清洗、阅读数计算
+        ↓
+data/index.ts               provider 注册表 + 工厂（按 BLOG_DATA_PROVIDER 选择）
+data/types.ts               领域模型 + BlogRepository 接口（服务商无关契约）
+        ↓
+data/providers/wps/         WPS 多维表实现
+  ├── config.ts             file_id / sheet_id / 中文字段名集中于此
+  ├── mappers.ts            多维表记录 ↔ 领域模型
+  ├── transport.ts          工具网关传输（CLI 子进程 / 直连 HTTP 双实现）
+  └── repository.ts         组装为 BlogRepository
+```
+
+**切换数据源**：在 `data/providers/<name>/` 实现 `BlogRepository` 接口，然后
+`registerBlogProvider('<name>', () => new XxxRepository())`，把 `BLOG_DATA_PROVIDER` 指向它即可——
+service 与 route 零改动。
+
+**WPS 传输方式**：`cli` 走 `kdocs-comate-cli` 子进程（需二进制）；`http` 直连工具网关
+`<endpoint>/skill_hub/api/v1/tool`（需 `WPS_API_TOKEN`，适合无法执行外部二进制的环境，
+如云函数）。两种传输对外行为一致，可用 `WPS_TOOL_TRANSPORT` 切换。
+
+**配置注入**：数据层不读运行期 `process.env`（平台可能同进程托管多个项目），
+由 `nitro.config.ts` 的 `runtimeConfig.blog` 声明、`plugins/data-source.ts` 启动时注入。
+环境变量仅在无宿主场景（测试、独立脚本、云函数）作为回退。
+
+### 测试
+
+```bash
+cd server && pnpm test    # 业务规则 + 传输解析（20 个用例，含内存假仓储）
+```
+
+业务层测试通过 `registerBlogProvider` 注入内存假仓储，无需真实数据源即可验证筛选/排序/清洗等规则。
 
 ## 目录结构
 
@@ -62,8 +108,10 @@ WPS_SID=<sid>
 │       ├── services/     # blog-api.ts（相对路径 ./api/...）
 │       └── styles/       # global.css（设计变量与排版体系）
 ├── server/               # Nitro 后端
-│   ├── routes/api/blog/  # posts / projects / comments / view
-│   ├── utils/blog-db.ts  # 多维表数据访问层
+│   ├── routes/api/blog/  # posts / projects / comments / view / config
+│   ├── services/         # blog-service.ts 业务规则（含单元测试）
+│   ├── data/             # 数据层：接口 + provider 注册表
+│   │   └── providers/wps/# WPS 多维表实现（config / mappers / transport / repository）
 │   └── proxy-63157.mjs   # 预览代理（63157 → 4917）
 └── docs/designs/         # DESIGN.md 设计规范
 ```
