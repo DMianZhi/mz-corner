@@ -177,6 +177,7 @@ transport 未生效、URL 前缀不匹配）。全部通过后浏览器打开静
 
 | 现象 | 原因 | 处理 |
 |---|---|---|
+| 500 + `50002` / `请先检查[环境管理-访问服务]中的HTTP访问服务开关` | 支付宝云网关层：云函数未部署、URL 化路由未生效，或空间的 HTTP 访问服务未开启 | 先在 HBuilderX 上传云函数；仍报错则到「环境管理 → 访问服务」开启 HTTP 访问服务 |
 | 500 + `spawn /bin/sh ENOENT` | transport 仍是 `cli`（变量没配、名字写错） | 确认 `WPS_TRANSPORT=http` 已生效 |
 | 500 + `WPS 工具调用失败: code=401 Unauthorized` | 令牌失效 / 未授权 | 重走 auth-guide，更新 `WPS_API_TOKEN`（必要时同时更新 `WPS_REQUEST_SOURCE_ENC`、`WPS_CLIENT_ID`） |
 | 500 + `HTTP 传输需要 WPS_API_TOKEN 环境变量` | 令牌变量没配或名字写错 | 检查变量名与作用域（要配在 `mz-corner-api` 上） |
@@ -188,5 +189,15 @@ transport 未生效、URL 前缀不匹配）。全部通过后浏览器打开静
 本地自检（无需真实令牌，验证产物能否加载、路由与 CORS 是否正常）：
 
 ```bash
-node scripts/verify-unicloud-deploy.mjs http://127.0.0.1:8899/mz-api
+pnpm run harness:unicloud          # 终端 A：本地模拟 uniCloud 事件（默认 :8899）
+pnpm run verify:unicloud http://127.0.0.1:8899/mz-api   # 终端 B：跑自检
 ```
+
+模拟器支持两种 `event.path` 形态（`full` / `stripped`），用来验证适配层的前缀剥离：
+
+```bash
+pnpm run harness:unicloud full 8899
+```
+
+> 传占位令牌（如 `WPS_API_TOKEN=dummy WPS_TRANSPORT=http`）时会返回 401，
+> 这正好可以验证自检脚本的失败诊断是否符合预期。

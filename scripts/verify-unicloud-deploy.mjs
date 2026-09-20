@@ -49,6 +49,9 @@ function diagnose(response) {
     return `网络错误：${response.error}`;
   }
   const body = response.text || "";
+  if (/50002|HTTP访问服务/.test(body)) {
+    return "支付宝云网关 50002：云函数未部署或 URL 化路由未生效——先在 HBuilderX 上传云函数；仍报错则确认「环境管理 → 访问服务」的 HTTP 访问服务已开启";
+  }
   if (/spawn \/bin\/sh/.test(body)) {
     return "transport 仍为 cli：云函数环境变量 WPS_TRANSPORT=http 未生效";
   }
