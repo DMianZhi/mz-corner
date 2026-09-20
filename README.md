@@ -122,18 +122,27 @@ cd server && pnpm test    # 业务规则 + 传输解析（20 个用例，含内�
 
 ### 方案 A：传统服务器（transport=cli）
 
-适合任意云主机 / VPS。
+适合任意云主机 / VPS。用 `node-server` 预设构建——**单个进程同时提供前端与 API**：
 
 ```bash
 git clone https://github.com/DMianZhi/mz-corner && cd mz-corner
-pnpm install && pnpm run pack
-cd server && node .output/server/index.mjs      # 默认监听 4917
+pnpm install
+
+# 构建独立服务（node-server 预设自带监听器）
+cd server && pnpm run build:standalone
+
+# 启动（默认读 PORT，缺省 3000）
+WPS_SID=<你的 WPS_SID> WPS_TRANSPORT=cli PORT=4917 node .output/server/index.mjs
 ```
 
-需要准备：
+前置条件：
 - `kdocs-comate-cli` 二进制放入 `PATH`（或设 `WPS_CLI_BIN` 指向绝对路径）
-- `WPS_SID` 写入环境变量（CLI 自行处理令牌交换与刷新）
-- Nginx：`client/dist` 作为静态根，`/api/` 反代到 `127.0.0.1:4917`
+- `WPS_SID` 通过环境变量传入（CLI 自行处理令牌交换与刷新）
+- 若希望 Nginx 托管静态文件：静态根指向 `client/dist`，`/api/` 反代到 `127.0.0.1:4917`；
+  或者直接用上面单进程模式，无需额外 Web 服务器
+
+> 注：`pnpm run pack` 产出的 `.output` 是平台托管用的 `node-listener` 预设（不含监听器，
+> 由平台接管生命周期），**不适用于独立部署**；独立部署请用上述 `node-server` 预设。
 
 ### 方案 B：Serverless / 云函数（transport=http）
 
@@ -155,6 +164,7 @@ WPS_CLIENT_ID=<客户端 ID>
 |---|---|---|
 | 文章列表 / 项目 / 配置读取 | ✅ | ✅ |
 | 阅读数写回 / 评论创建 | ✅ | ✅ |
+| 独立启动（`node-server` 预设） | ✅ 前端+API 单进程 | 同上 |
 
 ## License
 
