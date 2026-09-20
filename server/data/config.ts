@@ -28,10 +28,24 @@ export interface WpsDataSourceConfig {
   cliVersion?: string;
 }
 
+export interface Wps365DataSourceConfig {
+  /** Open API 基地址（默认 https://<endpoint>） */
+  baseUrl?: string;
+  /** 开放平台应用 client_id */
+  clientId?: string;
+  /** 开放平台应用 client_secret */
+  clientSecret?: string;
+  /** 委托模式的 refresh_token（长期有效，云函数靠它换 access_token） */
+  refreshToken?: string;
+  /** 直接给定 access_token（排障用，跳过刷新） */
+  accessToken?: string;
+}
+
 export interface DataSourceConfig {
   /** 数据源实现名，对应 data/index.ts 注册表 */
   provider?: string;
   wps?: WpsDataSourceConfig;
+  wps365?: Wps365DataSourceConfig;
 }
 
 let injected: DataSourceConfig = {};
@@ -42,12 +56,19 @@ export function configureDataSource(config: DataSourceConfig): void {
     ...injected,
     ...config,
     wps: { ...injected.wps, ...config.wps },
+    wps365: { ...injected.wps365, ...config.wps365 },
   };
 }
 
-/** 当前生效的数据源实现名 */
+/**
+ * 当前生效的数据源实现名。
+ *
+ * 默认 wps365：金山文档 AI 技能渠道（wps）实测仅支持 WPS 个人账号，
+ * 企业账号会返回 403 enterprise account not supported。
+ * 个人账号可显式设 BLOG_DATA_PROVIDER=wps 走工具网关。
+ */
 export function dataSourceProviderName(): string {
-  return (injected.provider || process.env.BLOG_DATA_PROVIDER || "wps").toLowerCase();
+  return (injected.provider || process.env.BLOG_DATA_PROVIDER || "wps365").toLowerCase();
 }
 
 export interface ResolvedWpsConfig {
@@ -67,6 +88,33 @@ const WPS_DEFAULTS = {
   cliBin: "kdocs-comate-cli",
   endpoint: "https://<endpoint>/skill_hub/api/v1/tool",
 } as const;
+
+export interface ResolvedWps365Config {
+  baseUrl: string;
+  clientId: string;
+  clientSecret: string;
+  refreshToken: string;
+  accessToken: string;
+}
+
+const WPS365_DEFAULTS = {
+  baseUrl: "https://<endpoint>",
+} as const;
+
+/**
+ * 解析 WPS 365 数据源配置：注入值 → 环境变量 → 默认值。
+ * 环境变量仅作为无宿主场景的回退，不用于 Nitro 运行期。
+ */
+export function resolveWps365Config(): ResolvedWps365Config {
+  const wps365 = injected.wps365 ?? {};
+  return {
+    baseUrl: wps365.baseUrl || process.env.WPS365_BASE_URL || WPS365_DEFAULTS.baseUrl,
+    clientId: wps365.clientId || process.env.WPS365_CLIENT_ID || "",
+    clientSecret: wps365.clientSecret || process.env.WPS365_CLIENT_SECRET || "",
+    refreshToken: wps365.refreshToken || process.env.WPS365_REFRESH_TOKEN || "",
+    accessToken: wps365.accessToken || process.env.WPS365_ACCESS_TOKEN || "",
+  };
+}
 
 /**
  * 解析 WPS 数据源配置：注入值 → 环境变量 → 默认值。

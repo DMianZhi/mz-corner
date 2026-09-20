@@ -29,7 +29,7 @@ export default defineNitroConfig({
     },
     // 博客数据源配置（运行期经 plugins/data-source.ts 注入数据层）
     blog: {
-      provider: process.env.BLOG_DATA_PROVIDER || 'wps',
+      provider: process.env.BLOG_DATA_PROVIDER || 'wps365',
       wps: {
         fileId: process.env.WPS_BLOG_FILE_ID || '',
         // 留空 = 未显式指定：运行期由数据层回退到 WPS_TRANSPORT 环境变量。
@@ -41,6 +41,14 @@ export default defineNitroConfig({
         requestSourceEnc: process.env.WPS_REQUEST_SOURCE_ENC || '',
         clientId: process.env.WPS_CLIENT_ID || '',
         cliVersion: process.env.WPS_CLI_VERSION || '',
+      },
+      // WPS 365 Open API（企业账号通道；refresh_token 长期有效，运行期换 access_token）
+      wps365: {
+        baseUrl: process.env.WPS365_BASE_URL || '',
+        clientId: process.env.WPS365_CLIENT_ID || '',
+        clientSecret: process.env.WPS365_CLIENT_SECRET || '',
+        refreshToken: process.env.WPS365_REFRESH_TOKEN || '',
+        accessToken: process.env.WPS365_ACCESS_TOKEN || '',
       },
     },
   },

@@ -9,6 +9,7 @@
  */
 import { dataSourceProviderName } from "./config";
 import { WpsBlogRepository } from "./providers/wps";
+import { Wps365BlogRepository } from "./providers/wps365";
 import type { BlogRepository } from "./types";
 
 export type BlogRepositoryFactory = () => BlogRepository;
@@ -25,12 +26,15 @@ export function listBlogProviders(): string[] {
   return [...registry.keys()];
 }
 
-/** 当前生效的数据源名称（注入值 → 环境变量 → 默认 wps） */
+/** 当前生效的数据源名称（注入值 → 环境变量 → 默认 wps365） */
 export function activeBlogProviderName(): string {
   return dataSourceProviderName();
 }
 
 // 内置实现：WPS 多维表
+// - wps365：WPS 365 Open API（企业账号可用，纯 HTTP）
+// - wps：金山文档 AI 技能工具网关（仅个人账号）
+registerBlogProvider("wps365", () => new Wps365BlogRepository());
 registerBlogProvider("wps", () => new WpsBlogRepository());
 
 let cached: BlogRepository | undefined;
