@@ -101,7 +101,12 @@ exports.main = async (event, context) => {
   const method = (event && event.httpMethod ? event.httpMethod : 'GET').toUpperCase();
   const cors = corsHeaders();
 
-  // 浏览器预检：直接短路，不进入业务逻辑
+  // 浏览器预检：直接短路，不进入业务逻辑。
+  //
+  // 注意：**支付宝云 URL 化网关会先截住 OPTIONS**（实测：对不存在的路径发 OPTIONS 也回
+  // 200 空体 + content-type: application/json，而同一路径的 GET 会打到函数并回 500），
+  // 所以这段在云端不会被执行、预检头也补不上。前端因此改用 text/plain 发 JSON
+  // （CORS 简单请求，不触发预检）。保留这段是为了本地 harness 与其他宿主。
   if (method === 'OPTIONS') {
     return composedResponse({ statusCode: 204, headers: cors });
   }

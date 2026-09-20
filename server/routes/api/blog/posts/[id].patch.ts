@@ -1,10 +1,11 @@
-import { defineEventHandler, getRouterParam, readBody } from "h3";
+import { defineEventHandler, getRouterParam } from "h3";
 import { updateArticleContent } from "~~/services/blog-service";
+import { readJsonBody } from "~~/utils/body";
 
 /** PATCH /api/blog/posts/:id — 更新文章正文（内容维护用） */
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, "id");
-  const body = await readBody<{ content?: string }>(event).catch(() => undefined);
+  const body = await readJsonBody<{ content?: string }>(event);
   const content = String(body?.content ?? "").trim();
   if (!id || !content) {
     return { code: 1, msg: "缺少 id 或 content" };

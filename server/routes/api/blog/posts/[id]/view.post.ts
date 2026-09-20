@@ -1,5 +1,6 @@
-import { createError, defineEventHandler, getRouterParam, readBody } from "h3";
+import { createError, defineEventHandler, getRouterParam } from "h3";
 import { registerArticleView } from "~~/services/blog-service";
+import { readJsonBody } from "~~/utils/body";
 import { errorMessage } from "~~/utils/errors";
 
 /**
@@ -13,7 +14,7 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    const body = await readBody<{ count?: number }>(event).catch(() => undefined);
+    const body = await readJsonBody<{ count?: number }>(event);
     const viewCount = await registerArticleView(id, Number(body?.count));
     if (viewCount === null) {
       return { code: 1, data: { viewCount: null } };

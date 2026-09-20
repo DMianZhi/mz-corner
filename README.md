@@ -140,6 +140,12 @@ SEED_TOKEN=<一次性迁移令牌>
 CORS_ORIGIN=<静态站域名>
 ```
 
+> **跨域**：支付宝云网关会直接应答 OPTIONS 预检（适配层的预检短路在云端不会执行，
+> 官方 URL 化文档也没有跨域配置项），所以前端写请求用 `text/plain` 发 JSON
+> ——CORS 简单请求不触发预检；服务端 `readJsonBody` 对 `application/json` 与
+> `text/plain` 都能解析，其他客户端不受影响。细节见
+> [`deploy/unicloud/README.md`](deploy/unicloud/README.md)。
+
 ### 本地开发与自检
 
 ```bash

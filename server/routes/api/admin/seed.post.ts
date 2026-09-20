@@ -1,5 +1,6 @@
-import { createError, defineEventHandler, getHeader, readBody } from "h3";
+import { createError, defineEventHandler, getHeader } from "h3";
 import { clearCollection, COLLECTIONS, countDocuments, insertDocuments } from "~~/data";
+import { readJsonBody } from "~~/utils/body";
 import { errorMessage } from "~~/utils/errors";
 
 /**
@@ -41,7 +42,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: "invalid seed token" });
   }
 
-  const body = await readBody<Record<string, unknown>>(event).catch(() => undefined);
+  const body = await readJsonBody<Record<string, unknown>>(event);
   if (!body || typeof body !== "object") {
     throw createError({ statusCode: 400, statusMessage: "empty request body" });
   }

@@ -5,6 +5,16 @@ import type { Article, Comment, ArticleListItem, PaginatedData, ArchiveData, Pro
 const API_ORIGIN = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/+$/, '');
 const BASE = API_ORIGIN ? `${API_ORIGIN}/api/blog` : './api/blog';
 
+/**
+ * 写请求统一用 `text/plain` 发 JSON 字符串。
+ *
+ * 原因：uniCloud URL 化网关会**直接应答 OPTIONS 预检**（实测：对不存在的路径发 OPTIONS
+ * 也回 200 空体、不进云函数），因此带 `application/json` 的跨域 POST 会在预检阶段被
+ * 浏览器拦死，请求根本到不了后端。`text/plain` 属于 CORS 简单请求，不触发预检；
+ * 服务端 `readJsonBody` 对两种 content-type 都能解析，所以其他客户端不受影响。
+ */
+const JSON_AS_TEXT = { 'Content-Type': 'text/plain;charset=UTF-8' } as const;
+
 async function apiGet<T>(url: string): Promise<T> {
   const res = await fetch(url, { headers: { Accept: 'application/json' } });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -90,7 +100,7 @@ export async function incrementViewCount(id: string, currentCount: number): Prom
   try {
     await fetch(`${BASE}/posts/${encodeURIComponent(id)}/view`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: JSON_AS_TEXT,
       body: JSON.stringify({ count: currentCount + 1 }),
     });
   } catch {
@@ -110,7 +120,7 @@ export async function addComment(input: {
       `${BASE}/posts/${encodeURIComponent(input.articleId)}/comments`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: JSON_AS_TEXT,
         body: JSON.stringify({
           author: input.author,
           email: input.email,

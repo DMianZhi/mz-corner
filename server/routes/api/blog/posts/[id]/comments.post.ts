@@ -1,5 +1,6 @@
-import { createError, defineEventHandler, getRouterParam, readBody } from "h3";
+import { createError, defineEventHandler, getRouterParam } from "h3";
 import { submitComment } from "~~/services/blog-service";
+import { readJsonBody } from "~~/utils/body";
 import { errorMessage } from "~~/utils/errors";
 
 interface CommentBody {
@@ -15,7 +16,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: "缺少文章 ID" });
   }
 
-  const body = await readBody<CommentBody>(event).catch(() => undefined);
+  const body = await readJsonBody<CommentBody>(event);
   const author = String(body?.author ?? "").trim();
   const content = String(body?.content ?? "").trim();
   if (!author || !content) {

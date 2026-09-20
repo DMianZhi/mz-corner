@@ -11,8 +11,11 @@
  * api-hz.cloudbasefunction.cn 是云函数调用（uni.request/callFunction）域名，
  * 两者不通用——打到 api-hz 会得到网关 50002。
  *
- * 第二个参数（前端域名）用于校验 CORS：跨域部署时前端域名必须出现在
- * 云函数的「安全域名」配置里，同时要与云函数环境变量 CORS_ORIGIN 一致。
+ * 第二个参数（前端域名）用于校验跨域：实测支付宝云网关会**直接应答 OPTIONS 预检**
+ * （不存在的路径也回 200 空体、不进云函数），我方适配层的预检短路在云端不会执行。
+ * 因此前端改用 `text/plain` 发 JSON（CORS 简单请求，不触发预检）——本脚本校验的正是
+ * 「简单请求能否跨域读到响应」，即真实请求响应里的 access-control-allow-origin。
+ * OPTIONS 的探测结果只作为已知现象的提示，不计入失败。
  */
 
 const DEFAULT_BASE = "https://<unicloud-space-id>.dev-hz.cloudbasefunction.cn/mz-api";
@@ -70,7 +73,7 @@ function diagnose(response) {
     return "404：URL 化路径前缀与请求路径不匹配，检查前缀是否与 baseUrl 一致（或设 UNICLOUD_URL_PREFIX）";
   }
   if (response.status === 403) {
-    return "403：可能是安全域名 / 防盗链配置拦截，或支付宝云默认域名限流";
+    return "403：云函数拒绝了请求（防盗链 / 域名限流 / 权限），云函数日志可看到根因";
   }
   if (response.status >= 500) {
     return `HTTP ${response.status}：${body.slice(0, 140).replace(/\s+/g, " ")} —— 云函数日志可看到根因`;
@@ -167,36 +170,44 @@ if (postsRes.error || postsRes.status !== 200) {
 }
 
 /*
- * 3. CORS 预检 —— 静态托管与云函数跨域时必须通过。
+ * 3. 跨域 —— 校验「真实请求的响应带 access-control-allow-origin」。
  *
- * 实测：支付宝云网关会**直接应答 OPTIONS**（连不存在的路径都回 200 空体、不进入云函数），
- * 因此适配层里的预检短路在云端不会被执行，预检头只能由控制台的跨域配置产生。
- * 影响面：GET 不带自定义请求头不触发预检（读取正常），只有带 application/json 的 POST 会受影响。
+ * 这是浏览器能否读到跨域响应的充要条件（简单请求场景）；预检那条路已确认被网关截住，
+ * 前端因此改走简单请求（text/plain），所以这里不再把 OPTIONS 结果当作失败。
  */
-const preflightOrigin = origin || "https://example.invalid";
+const probeOrigin = origin || "https://example.invalid";
+const crossOrigin = unwrap(await probe("/api/blog/config", { headers: { Origin: probeOrigin } }));
+if (crossOrigin.error) {
+  record("跨域响应头 (CORS)", false, diagnose(crossOrigin));
+} else {
+  const acao = crossOrigin.headers.get("access-control-allow-origin");
+  const ok = Boolean(acao) && (acao === "*" || acao === probeOrigin);
+  record(
+    "跨域响应头 (CORS)",
+    ok,
+    ok
+      ? `allow-origin=${acao}${origin ? `（含前端域名 ${origin}）` : ""}`
+      : acao
+        ? `allow-origin=${acao} 不含 ${probeOrigin}：把云函数环境变量 CORS_ORIGIN 设为前端域名`
+        : "响应缺 access-control-allow-origin：浏览器读不到跨域响应（检查云函数环境变量 CORS_ORIGIN，以及请求是否真的到达云函数）",
+  );
+}
+
+// 预检探测：仅作已知现象提示，不计入失败
 const preflight = unwrap(await probe("/api/blog/posts", {
   method: "OPTIONS",
   headers: {
-    Origin: preflightOrigin,
-    "Access-Control-Request-Method": "GET",
+    Origin: probeOrigin,
+    "Access-Control-Request-Method": "POST",
     "Access-Control-Request-Headers": "content-type",
   },
 }));
-if (preflight.error) {
-  record("OPTIONS 预检 (CORS)", false, diagnose(preflight));
-} else {
-  const acao = preflight.headers.get("access-control-allow-origin");
-  const ok = Boolean(acao) && (acao === "*" || acao === preflightOrigin);
-  record(
-    "OPTIONS 预检 (CORS)",
-    ok,
-    ok
-      ? `allow-origin=${acao}`
-      : acao
-        ? `allow-origin=${acao} 未包含 ${preflightOrigin}：在云函数「安全域名/跨域配置」里放行该域名，并让 CORS_ORIGIN 与之一致`
-        : "预检缺 access-control-allow-origin：OPTIONS 由网关应答（不进云函数），需在控制台云函数「安全域名/跨域配置」放行前端域名；GET 读取不受影响，仅写操作会被浏览器拦下",
-  );
-}
+const preflightAcao = preflight.error ? "" : preflight.headers.get("access-control-allow-origin");
+console.log(
+  preflightAcao
+    ? `• OPTIONS 预检 — allow-origin=${preflightAcao}（网关放行，非必需）`
+    : "• OPTIONS 预检 — 网关直接应答、无 CORS 头（已知现象，前端已用简单请求规避；仅影响带 application/json 的跨域写请求）",
+);
 
 const failed = results.filter((item) => !item.ok);
 console.log(`\n${failed.length === 0 ? "全部通过" : `${failed.length}/${results.length} 项未通过`}\n`);

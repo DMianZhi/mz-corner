@@ -270,21 +270,28 @@ VITE_API_BASE=https://<unicloud-space-id>.dev-hz.cloudbasefunction.cn/mz-api pnp
 
 > 若把前端也部署在同一台服务器/同源路径下，`VITE_API_BASE` 留空即可（默认相对路径 `./api/blog`）。
 
-## 步骤 7：配置安全域名（跨域）
+## 步骤 7：跨域（已用「简单请求」规避预检）
 
-静态托管与云函数不同源，除了适配层内置的 CORS 响应头，uniCloud 还要求在控制台放行来源：
+**实测：支付宝云 URL 化网关会直接应答 OPTIONS 预检**——对不存在的路径发 OPTIONS 也回
+`200` + 空体 + `content-type: application/json`（而同一路径的 GET 会打到函数并回 500）。
+也就是说适配层里的「OPTIONS 短路」在云端**不会被执行**，预检头补不上；官方 URL 化文档
+也没有任何跨域配置项——**不要去控制台找「安全域名」开关，实测不存在**。
 
-控制台 → 云函数 → `mz-corner-api` → **安全域名 / 跨域配置** → 添加前端网页托管的域名。
+处置：**前端写请求改用 `text/plain` 发 JSON**（CORS 简单请求，不触发预检），
+服务端 `server/utils/body.ts` 的 `readJsonBody` 对 `application/json` 与 `text/plain`
+都能解析，curl / 脚本等其他客户端照旧用标准 JSON。
 
-> **实测：预检由网关应答，不进云函数**。对不存在的路径发 OPTIONS 也回 `200` + 空体 +
-> `content-type: application/json`（而同一路径的 GET 会打到函数并回 500），说明
-> 适配层里的「OPTIONS 短路」在云端**不会被执行**，预检头只能由上面的控制台配置产生。
->
-> 影响面可控：GET 不带自定义请求头**不触发预检**（所以文章读取一直正常），
-> 只有带 `application/json` 的 POST（提交评论）会被浏览器拦下。
-> 自检脚本第 3 项专门测这个，未通过时给的处置就是这个控制台配置。
+真实浏览器（headless Chromium，页面跑在 `127.0.0.1`）实测三种情形：
 
-同时建议把云函数环境变量 `CORS_ORIGIN` 设为该域名（不设则为 `*`）。
+| 请求 | 结果 |
+|---|---|
+| `GET /api/blog/config`（无自定义头，不触发预检） | ✅ 200，可读 |
+| `POST` + `application/json` | ❌ `Failed to fetch`（预检被网关截住） |
+| `POST` + `text/plain`（简单请求） | ✅ 200/404 正常拿到响应体 |
+
+云函数环境变量 `CORS_ORIGIN` 仍建议设为前端域名（不设则回 `*`，公开只读博客可接受）。
+自检脚本第 3 项校验的是「真实响应是否带 `access-control-allow-origin`」，
+OPTIONS 的探测结果只作为已知现象提示，不计入失败。
 
 ## 步骤 8：验证
 
@@ -359,7 +366,8 @@ uniCloud 云函数要返回 `{ statusCode, headers, body }` 这种「集成响�
 | `GET /api/health` 里 `database=unavailable` | 云函数运行时没有注入 `uniCloud` 全局（本地裸跑 Node 时必然如此） | 云端出现才需处理：确认部署的是最新产物；本地用 `pnpm run harness:unicloud` 会注入内存假库 |
 | `POST /api/admin/seed` 回 403 | `SEED_TOKEN` 没配或与请求头 `x-seed-token` 不一致 | 在云函数环境变量里配 `SEED_TOKEN`，请求时带同一值 |
 | `POST /api/admin/seed` 回 **404** | 云端没读到 `SEED_TOKEN`（未配置，或以为 `.env` 会随上传同步） | 到控制台云函数「环境变量」里配；CLI 与 `.env` 都传不上去（实测） |
-| 自检第 3 项「OPTIONS 预检」失败 | OPTIONS 被网关截住、不进云函数，预检头只能由控制台跨域配置产生 | 控制台 → 云函数 → 「安全域名/跨域配置」放行前端域名；GET 读取不受影响，仅 POST 评论会被浏览器拦 |
+| 自检第 3 项「跨域响应头 (CORS)」失败 | 真实响应缺 `access-control-allow-origin` | 把云函数环境变量 `CORS_ORIGIN` 设为前端域名（不设则为 `*`） |
+| 浏览器里 POST 报 `Failed to fetch`、GET 正常 | 该请求带了 `application/json` → 触发预检 → 被网关截住 | 前端写请求用 `text/plain` 发 JSON（已内置）；服务端 `readJsonBody` 两种都收 |
 | 接口 200 但列表恒为空 | 数据还没迁进云数据库 | 跑一次「步骤 4」的数据迁移（迁移后 `posts` 应有 23 篇） |
 | 前端报 CORS | `CORS_ORIGIN` 与静态站域名不一致，或未配安全域名 | 云函数「安全域名」里放行前端域名，并把 `CORS_ORIGIN` 改成静态站实际域名（或留空为 `*`） |
 | 全部 404 | URL 化前缀与请求路径不匹配 | 核对控制台里配的访问路径与请求 URL 前缀是否一致（本项目为 `/mz-api`），不一致时同步设 `UNICLOUD_URL_PREFIX` |
