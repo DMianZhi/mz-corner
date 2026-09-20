@@ -165,6 +165,10 @@ WPS_CLIENT_ID=<客户端 ID>
 该模式直连 `<endpoint>/skill_hub/api/v1/tool`，无需 CLI。
 令牌获取：`https://<endpoint>/kdocs-auth/auth-guide`（浏览器授权，账号登录后回调下发，支持刷新）。
 
+注意：`WPS_TRANSPORT` 必须是 `http`（云函数里没有 `/bin/sh` 与 CLI 二进制，留空会全量 500）；
+令牌失效时接口返回 500 且 `message` 为 `code=401 Unauthorized`，不会静默返回空列表。
+排查表见 [`deploy/unicloud/README.md`](deploy/unicloud/README.md#排查)。
+
 ### 两种形态已验证的行为
 
 | 项目 | cli | http |

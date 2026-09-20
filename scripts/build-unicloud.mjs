@@ -17,9 +17,13 @@ const serverDir = path.join(root, "server");
 const outputDir = path.join(serverDir, ".output");
 const targetDir = path.join(root, "deploy/unicloud/cloudfunctions/mz-corner-api/nitro");
 
+// Windows 下 node_modules/.bin 里只有 .CMD shim，Node 20+ 无法直接 execFileSync 执行，
+// 统一用 node 跑 nitropack 的 CLI 入口，保证跨平台一致。
+const nitroCli = path.join(serverDir, "node_modules/nitropack/dist/cli/index.mjs");
+
 console.log("→ 构建 Nitro（preset=aws-lambda）");
 await rm(outputDir, { recursive: true, force: true });
-execFileSync(path.join(serverDir, "node_modules/.bin/nitropack"), ["build"], {
+execFileSync(process.execPath, [nitroCli, "build"], {
   cwd: serverDir,
   stdio: "inherit",
   env: { ...process.env, NITRO_PRESET: "aws-lambda" },

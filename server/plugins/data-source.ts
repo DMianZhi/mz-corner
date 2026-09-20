@@ -26,7 +26,10 @@ export default defineNitroPlugin(() => {
   const runtime = useRuntimeConfig();
   const blog = (runtime.blog ?? {}) as BlogRuntimeConfig;
   const wps = blog.wps ?? {};
-  const transport: WpsTransportKind = wps.transport === "http" ? "http" : "cli";
+  // 仅在显式配置时下发；留 undefined 让数据层回退到 WPS_TRANSPORT 环境变量
+  // （runtimeConfig 的构建期默认值会覆盖环境变量，所以这里不能把未知值强转成 'cli'）
+  const transport: WpsTransportKind | undefined =
+    wps.transport === "http" || wps.transport === "cli" ? wps.transport : undefined;
 
   configureDataSource({
     provider: blog.provider || "wps",
@@ -45,5 +48,7 @@ export default defineNitroPlugin(() => {
   // 配置可能晚于首次访问，清掉可能已缓存的仓储实例
   resetBlogRepository();
 
-  logger.info(`Data source plugin initialized (provider=${blog.provider || "wps"}, transport=${transport})`);
+  logger.info(
+    `Data source plugin initialized (provider=${blog.provider || "wps"}, transport=${transport ?? "auto(env)"})`,
+  );
 });

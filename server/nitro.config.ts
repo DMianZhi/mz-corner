@@ -24,7 +24,9 @@ export default defineNitroConfig({
       provider: process.env.BLOG_DATA_PROVIDER || 'wps',
       wps: {
         fileId: process.env.WPS_BLOG_FILE_ID || '',
-        transport: process.env.WPS_TRANSPORT || 'cli',
+        // 留空 = 未显式指定：运行期由数据层回退到 WPS_TRANSPORT 环境变量。
+        // 不可写死 'cli'——Nitro 会把构建期取值内联进产物，运行期再配 WPS_TRANSPORT 将被覆盖。
+        transport: process.env.WPS_TRANSPORT || '',
         cliBin: process.env.WPS_CLI_BIN || 'kdocs-comate-cli',
         endpoint: process.env.WPS_TOOL_ENDPOINT || '',
         apiToken: process.env.WPS_API_TOKEN || '',

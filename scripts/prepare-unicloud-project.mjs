@@ -50,6 +50,9 @@ await writeFile(
    | \`WPS_CLIENT_ID\` | 客户端 ID |
    | \`CORS_ORIGIN\` | 静态站域名（可选，默认 \`*\`） |
 
+   \`WPS_TRANSPORT\` 必须为 \`http\`：云函数里没有 \`/bin/sh\` 也没有 CLI 二进制。
+   令牌失效时接口返回 500 + \`code=401 Unauthorized\`（不会静默返回空列表）。
+
 4. 控制台 → 云函数 → \`mz-corner-api\` → **URL 化**，设置路径前缀
 5. 前端构建时指向该地址：
 

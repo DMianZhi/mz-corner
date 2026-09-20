@@ -47,3 +47,6 @@ thumbnail.png
 # uniCloud 云函数构建产物（pnpm run build:unicloud 生成）
 deploy/unicloud/cloudfunctions/*/nitro/
 uniCloud-aliyun/
+
+# ── 构建缓存 ──
+*.tsbuildinfo

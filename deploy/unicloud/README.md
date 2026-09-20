@@ -48,12 +48,18 @@ mz-corner-api/
 uniCloud-aliyun/cloudfunctions/mz-corner-api/
 ```
 
-用 HBuilderX 右键「上传部署」，或使用 uniCloud CLI：
+（`pnpm run prepare:unicloud aliyun` 会直接生成这个骨架目录。）
 
-```bash
-npx @dcloudio/uni-cloud-cli login
-npx @dcloudio/uni-cloud-cli upload --space <spaceId> --function mz-corner-api
-```
+然后在 HBuilderX 里：
+
+1. **文件 → 打开目录**，选中 `uniCloud-aliyun`
+2. 若提示未关联服务空间：右键 `uniCloud-aliyun` → **关联云服务空间或项目**
+3. 右键 `cloudfunctions/mz-corner-api` → **上传部署**（快捷键 `Ctrl+U`）
+
+> **关于 CLI**：DCloud 只在 **Linux** 提供可上传 uniCloud 云函数的 CLI
+> （<https://hx.dcloud.net.cn/cli/README>，用途是服务器上做 CI 自动化）；
+> Windows / macOS 桌面端只能走 HBuilderX 图形界面。
+> npm 上**不存在** `@dcloudio/uni-cloud-cli` 这个包，不要按旧文档去找。
 
 ## 步骤 3：配置云函数环境变量
 
@@ -66,6 +72,14 @@ npx @dcloudio/uni-cloud-cli upload --space <spaceId> --function mz-corner-api
 | `WPS_REQUEST_SOURCE_ENC` | 请求签名 |
 | `WPS_CLIENT_ID` | 客户端 ID |
 | `CORS_ORIGIN` | 静态站域名（不填为 `*`） |
+
+> **变量名语义**（已在本地对构建产物实测）：
+> `WPS_TRANSPORT` 等 `WPS_*` 变量由数据层在**运行期**读取，云函数控制台配置即可生效。
+> 如果你想用 Nitro 原生的 runtimeConfig 覆盖写法，对应名字是 `BLOG_WPS_TRANSPORT`（多一层 `BLOG_` 前缀），
+> 两者等效。
+>
+> 切忌把 `WPS_TRANSPORT` 留空或写成 `cli`：云函数里既没有 `/bin/sh` 也没有 CLI 二进制，
+> 所有 `/api/blog/*` 会直接 500（日志里是 `spawn /bin/sh ENOENT`）。
 
 ## 步骤 4：开启云函数 URL 化
 
@@ -95,10 +109,29 @@ curl https://<spaceId>.bspapp.com/api-mz-corner/api/blog/config  # 站点配置
 
 ## 注意事项
 
-- **令牌有效期**：`WPS_API_TOKEN` 为会话令牌，过期后接口会返回错误（云函数日志中有明确记录）。
-  上线前建议观察一天确认有效期；失效时重新走 auth-guide 换取并更新环境变量。
+- **令牌有效期**：`WPS_API_TOKEN` 为会话令牌，过期后接口会返回 500，
+  `message` 为 `WPS 工具调用失败: code=401 Unauthorized`（云函数日志同样有记录）。
+  失效时重新走 auth-guide 换取并更新环境变量。
   若需要长期免维护，可改用方案 A（`WPS_TRANSPORT=cli`，由 CLI 自动刷新凭据）。
 - **跨域**：静态托管与云函数不同源，适配层已内置 CORS（含预检短路）。
   生产环境建议把 `CORS_ORIGIN` 设为静态站域名，避免开放给任意来源。
 - **写接口**：评论提交、阅读数写回是公开写操作，如需限制请自行加校验。
 - **冷启动**：云函数首次调用有 300~800ms 冷启动，之后复用 Nitro 实例。
+
+## 排查
+
+部署后接口不通，先看云函数日志里的 `message`，基本可以直接定位：
+
+| 现象 | 原因 | 处理 |
+|---|---|---|
+| 500 + `spawn /bin/sh ENOENT` | transport 仍是 `cli`（变量没配、名字写错） | 确认 `WPS_TRANSPORT=http` 已生效 |
+| 500 + `WPS 工具调用失败: code=401 Unauthorized` | 令牌失效 / 未授权 | 重走 auth-guide，更新 `WPS_API_TOKEN`（必要时同时更新 `WPS_REQUEST_SOURCE_ENC`、`WPS_CLIENT_ID`） |
+| 500 + `HTTP 传输需要 WPS_API_TOKEN 环境变量` | 令牌变量没配或名字写错 | 检查变量名与作用域（要配在 `mz-corner-api` 上） |
+| 接口 200 但列表恒为空 | 旧版本会静默吞掉网关失败码 | 重新构建并上传（当前版本已改为抛错，不再静默返回空） |
+| 前端报 CORS | `CORS_ORIGIN` 与静态站域名不一致 | 把 `CORS_ORIGIN` 改成静态站实际域名，或留空为 `*` |
+
+本地自检（无需真实令牌，验证产物能否加载、路由与 CORS 是否正常）：
+
+```bash
+WPS_TRANSPORT=http node -e "const m=require('./deploy/unicloud/cloudfunctions/mz-corner-api');m.main({path:'/api/blog/posts',httpMethod:'OPTIONS',headers:{}},).then(r=>console.log(r.statusCode))"
+```
