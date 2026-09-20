@@ -147,6 +147,13 @@ WPS_SID=<你的 WPS_SID> WPS_TRANSPORT=cli PORT=4917 node .output/server/index.m
 ### 方案 B：Serverless / 云函数（transport=http）
 
 适合无法执行外部二进制的环境（uniCloud 云函数、Vercel Functions 等）。
+完整步骤见 [`deploy/unicloud/README.md`](deploy/unicloud/README.md)。
+
+```bash
+pnpm run build:unicloud    # 产出 deploy/unicloud/cloudfunctions/mz-corner-api
+```
+
+云函数侧环境变量：
 
 ```ini
 WPS_TRANSPORT=http

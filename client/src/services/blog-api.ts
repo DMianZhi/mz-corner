@@ -1,7 +1,9 @@
 import type { Article, Comment, ArticleListItem, PaginatedData, ArchiveData, Project, SiteConfig } from '@/types/blog';
 
-// 通过 Nitro 后端 /api/blog/* 访问 WPS 多维表（后端调用 kdocs CLI 代理）
-const BASE = './api/blog';
+// 通过 Nitro 后端 /api/blog/* 访问 WPS 多维表（后端调用 kdocs CLI 或工具网关）
+// 同源部署（单进程 / Nginx 反代）留空即可；静态托管 + 云函数分离时用 VITE_API_BASE 指向函数地址
+const API_ORIGIN = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/+$/, '');
+const BASE = API_ORIGIN ? `${API_ORIGIN}/api/blog` : './api/blog';
 
 async function apiGet<T>(url: string): Promise<T> {
   const res = await fetch(url, { headers: { Accept: 'application/json' } });

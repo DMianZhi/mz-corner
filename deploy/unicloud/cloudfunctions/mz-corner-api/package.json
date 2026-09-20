@@ -1,0 +1,8 @@
+{
+  "name": "mz-corner-api",
+  "version": "1.0.0",
+  "description": "mz-corner 博客 API —— Nitro 产物 + uniCloud 适配层",
+  "main": "index.js",
+  "private": true,
+  "dependencies": {}
+}
