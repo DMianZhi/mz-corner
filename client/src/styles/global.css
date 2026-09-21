@@ -269,6 +269,26 @@ html.light .watermark {
   border-color: var(--brand, #C8F542) !important;
 }
 
+/* 上一篇 / 下一篇（方案 A：极简文字行）。hover 时标题转信号色、箭头朝对应方向微移 3px。
+   基础样式写在 JSX 内联里，所以 hover 态用 !important 覆盖（与 .md-copy-btn 同约定）。 */
+.post-nav .pn-title,
+.post-nav .pn-label,
+.post-nav .pn-arrow {
+  transition: color 250ms var(--ease-standard), transform 250ms var(--ease-standard);
+}
+.post-nav .pn-item:hover .pn-title {
+  color: var(--brand) !important;
+}
+.post-nav .pn-item:hover .pn-label {
+  color: var(--text-2) !important;
+}
+.post-nav .pn-prev:hover .pn-arrow {
+  transform: translateX(-3px);
+}
+.post-nav .pn-next:hover .pn-arrow {
+  transform: translateX(3px);
+}
+
 /* 骨架屏微光：低亮扫光，深浅两主题共用 currentColor 体系 */
 .skeleton-bar {
   background: linear-gradient(

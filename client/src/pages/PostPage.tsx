@@ -5,6 +5,7 @@ import { Markdown } from '@/components/Markdown';
 import { PostSkeleton } from '@/components/Skeletons';
 import { ArrowLeftIcon, ArrowRightIcon } from '@/components/icon';
 import { getArticle, getArticles, getComments, addComment, incrementViewCount } from '@/services/blog-api';
+import { adjacentOf } from '@/utils/post-nav';
 import type { Article, ArticleListItem, Comment } from '@/types/blog';
 
 function ReadingProgress() {
@@ -30,67 +31,58 @@ function ReadingProgress() {
   );
 }
 
-/** 单侧导航卡：左卡箭头在前、右卡箭头在后，标签与文字各自对齐外侧 */
-function NavCard({ dir, a }: { dir: 'prev' | 'next'; a: ArticleListItem }) {
+/**
+ * 单侧导航项（方案 A：极简文字行）
+ *
+ * 无盒子、无底色、无日期，只有「方向词 + 标题」，靠左右两端定位。
+ * 左卡箭头在前、右卡箭头在后；标题固定单行，超长省略号截断 —— 相邻篇标题
+ * 长度差异很大，不锁单行两侧高度会参差。
+ *
+ * 标题必须占满整列（width:100%）：右卡若靠 align-items 收缩到内容宽度，
+ * 长标题就不会被列宽约束，省略号失效并溢出。
+ */
+function NavItem({ dir, a }: { dir: 'prev' | 'next'; a: ArticleListItem }) {
   const isPrev = dir === 'prev';
-  const date = a.publishDate ? a.publishDate.slice(0, 10).replace(/\//g, '-') : '';
   return (
     <a
       href={`#/post/${a.id}`}
-      className="flex flex-col gap-2 no-underline"
+      className={`pn-item ${isPrev ? 'pn-prev' : 'pn-next'} no-underline`}
       style={{
-        padding: '18px 20px',
-        borderRadius: 16,
-        border: '1px solid var(--border-soft)',
-        background: 'var(--bg-card)',
+        display: 'flex', flexDirection: 'column', gap: 9,
         textAlign: isPrev ? 'left' : 'right',
-        transition: 'border-color 250ms cubic-bezier(0.16,1,0.3,1), background 250ms cubic-bezier(0.16,1,0.3,1)',
-      }}
-      onMouseEnter={(e) => {
-        const el = e.currentTarget as HTMLElement;
-        el.style.borderColor = 'var(--brand)';
-        el.style.background = 'var(--bg-hover)';
-      }}
-      onMouseLeave={(e) => {
-        const el = e.currentTarget as HTMLElement;
-        el.style.borderColor = 'var(--border-soft)';
-        el.style.background = 'var(--bg-card)';
       }}
     >
       <span
-        className="font-mono-site"
+        className="pn-label font-mono-site"
         style={{
           fontSize: 12, color: 'var(--text-3)',
-          display: 'flex', alignItems: 'center', gap: 6,
+          display: 'flex', alignItems: 'center', gap: 7,
           justifyContent: isPrev ? 'flex-start' : 'flex-end',
         }}
       >
-        {isPrev && <ArrowLeftIcon size={13} />}
+        {isPrev && <ArrowLeftIcon size={13} className="pn-arrow" />}
         {isPrev ? '上一篇' : '下一篇'}
-        {!isPrev && <ArrowRightIcon size={13} />}
+        {!isPrev && <ArrowRightIcon size={13} className="pn-arrow" />}
       </span>
-      {/* 标题最多两行：相邻篇标题长度差异大，不夹住会把卡片撑得高低不齐 */}
       <span
+        className="pn-title"
         style={{
-          fontSize: 16, fontWeight: 600, color: 'var(--text-1)', lineHeight: 1.45,
-          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+          width: '100%', fontSize: 16, fontWeight: 600, color: 'var(--text-1)', lineHeight: 1.45,
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}
       >
         {a.title}
-      </span>
-      <span className="font-mono-site" style={{ fontSize: 12, color: 'var(--text-3)' }}>
-        {date}{a.category ? ` · ${a.category}` : ''}
       </span>
     </a>
   );
 }
 
 /**
- * 上一篇 / 下一篇
+ * 上一篇 / 下一篇（方案 A：极简文字行）
  *
  * 顺序与 /articles 列表完全一致（publishDate 倒序）：
  * 「上一篇」= 列表中靠上的一条（更新），「下一篇」= 靠下的一条（更早）。
- * 卡片上带日期，方向对读者自明。
+ * 两侧高度永远齐平（标题锁单行）；悬停反馈见 global.css 的 .post-nav 规则。
  */
 function PostNav({ id }: { id: string }) {
   const [list, setList] = useState<ArticleListItem[]>([]);
@@ -102,20 +94,16 @@ function PostNav({ id }: { id: string }) {
   }, []);
 
   // 列表只拉一次，翻篇时靠 id 重新定位，相邻篇是瞬时出现的（不再发请求）
-  const i = list.findIndex((a) => a.id === id);
-  const prev = i > 0 ? list[i - 1] : null;
-  const next = i >= 0 && i < list.length - 1 ? list[i + 1] : null;
+  const { prev, next } = adjacentOf(list, id);
 
   if (!prev && !next) return null;
 
   return (
-    <nav
-      data-post-nav=""
-      className="mt-16 grid gap-4 sm:grid-cols-2"
-      style={{ borderTop: '1px solid var(--border-soft)', paddingTop: 32 }}
-    >
-      {prev ? <NavCard dir="prev" a={prev} /> : <span className="hidden sm:block" />}
-      {next ? <NavCard dir="next" a={next} /> : <span className="hidden sm:block" />}
+    // 移动端显式写 grid-cols-1：单列 grid 的隐式列是 auto（max-content），
+    // 长标题会把列撑宽而绕过省略号；grid-cols-1 是 minmax(0,1fr)，能真正约束住。
+    <nav data-post-nav="" className="post-nav mt-16 grid grid-cols-1 gap-8 sm:grid-cols-2 sm:gap-14">
+      {prev ? <NavItem dir="prev" a={prev} /> : <span className="hidden sm:block" />}
+      {next ? <NavItem dir="next" a={next} /> : <span className="hidden sm:block" />}
     </nav>
   );
 }
