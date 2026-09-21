@@ -24,10 +24,12 @@
 
 ## 环境变量
 - Vite 通过 `import.meta.env` 暴露 `VITE_*` 前缀的环境变量。
+- 静态托管与云函数分离部署时，构建前必须给 `VITE_API_BASE` 赋值为云函数 URL，
+  否则前端会回落到同源 `./api/...`，页面能开但取不到数据。
 
 ## 服务端接口调用
 - 使用裸 `fetch('./api/...')` 调用服务端路由，不需要 `credentials: "include"`。
-- 禁止直连外部 API（如 `https://<endpoint>`），所有数据操作通过服务端路由。
+- 禁止直连外部 API（第三方服务、云数据库等），所有数据操作通过服务端路由。
 
 ## 命令
 `pnpm run dev`、`pnpm run build`、`pnpm run pack:frontend`、`pnpm run lint`、`pnpm run check:types`。
