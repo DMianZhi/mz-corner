@@ -5,8 +5,10 @@
  * 用户；实例重启计数丢失是已知局限——重启后多给它几次尝试机会而已，窗口
  * 仍在。要持久化计数需引入数据库写放大，对单人博客不成比例。
  *
- * 滑动窗口语义：锁定解除时间 = 最近第 max 次失败时间 + windowSec。
+ * 滑动窗口语义：锁定解除时间 = 最近一次失败时间 + windowSec。
  * 窗口内每次新失败都会顺延锁定点（而非固定窗口的重置）。
+ * 判定基于完整失败历史（不先剪枝）——剪枝只服务内存上限，
+ * 否则早期失败被剪掉会让「不足 max 次」的误判提前解锁。
  */
 
 export interface LoginThrottle {
@@ -14,7 +16,7 @@ export interface LoginThrottle {
   registerFailure(key: string): void;
   /** 记录一次该 key 的登录成功：清零其失败历史 */
   registerSuccess(key: string): void;
-  /** 该 key 当前是否处于锁定状态（顺带清理过期历史，防内存泄漏） */
+  /** 该 key 当前是否处于锁定状态 */
   isLocked(key: string): boolean;
 }
 
@@ -32,25 +34,16 @@ export function createLoginThrottle(options: LoginThrottleOptions = {}): LoginTh
   const windowMs = Math.max(1, (options.windowSec ?? 900) * 1000);
   const now = options.now ?? Date.now;
 
-  /** key → 失败时间戳列表（升序） */
+  /** key → 失败时间戳列表（升序）。只截尾保内存，不按时间剪——见文件头 */
   const failures = new Map<string, number[]>();
-
-  /** 清理该 key 在窗口外/已解除锁定的历史 */
-  const prune = (key: string) => {
-    const list = failures.get(key);
-    if (!list) return;
-    const cutoff = now() - windowMs;
-    const alive = list.filter((ts) => ts > cutoff);
-    if (alive.length === 0) failures.delete(key);
-    else failures.set(key, alive);
-  };
+  const MAX_HISTORY = 100;
 
   return {
     registerFailure(key: string): void {
       const list = failures.get(key) ?? [];
       list.push(now());
+      if (list.length > MAX_HISTORY) list.splice(0, list.length - MAX_HISTORY);
       failures.set(key, list);
-      prune(key);
     },
 
     registerSuccess(key: string): void {
@@ -58,9 +51,10 @@ export function createLoginThrottle(options: LoginThrottleOptions = {}): LoginTh
     },
 
     isLocked(key: string): boolean {
-      prune(key);
-      const list = failures.get(key) ?? [];
-      return list.length >= max;
+      const list = failures.get(key);
+      if (!list || list.length < max) return false;
+      const lastFailure = list[list.length - 1];
+      return now() < lastFailure + windowMs;
     },
   };
 }

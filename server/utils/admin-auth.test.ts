@@ -1,5 +1,68 @@
-import { describe, expect, it } from "vitest";
-import { checkAdminToken } from "./admin-auth";
+import { afterEach, describe, expect, it } from "vitest";
+import { checkAdminToken, resolveAdminAuth } from "./admin-auth";
+
+/**
+ * resolveAdminAuth 真值表：三通道决策纯函数。
+ * 通道优先级：管理员会话（x-admin-session）> Cookie 同值 > 旧 seed 令牌头。
+ * 返回值映射 HTTP：ok→放行；unauthorized→401；forbidden→403；hidden→404。
+ */
+describe("resolveAdminAuth", () => {
+  const base = {
+    adminConfigured: true,
+    seedConfigured: true,
+    sessionProvided: false,
+    sessionValid: false,
+    seedProvided: false,
+    seedValid: false,
+  };
+
+  it("会话有效 → ok（其它通道无关）", () => {
+    expect(resolveAdminAuth({ ...base, sessionProvided: true, sessionValid: true })).toBe("ok");
+    expect(resolveAdminAuth({ ...base, sessionProvided: true, sessionValid: true, seedProvided: true, seedValid: false })).toBe("ok");
+  });
+
+  it("提供了会话但无效 → unauthorized（401：请重新登录）", () => {
+    expect(resolveAdminAuth({ ...base, sessionProvided: true, sessionValid: false })).toBe("unauthorized");
+  });
+
+  it("新守卫语义：admin 已配 + 无会话 → unauthorized（401），即使 seed 令牌正确", () => {
+    // 管理后台已激活后，写端点统一走会话语义；seed 头不再作为旁路
+    expect(resolveAdminAuth({ ...base, seedProvided: true, seedValid: true })).toBe("unauthorized");
+  });
+
+  it("admin 未配但 SEED_TOKEN 已配：有效 seed 头 → ok（向后兼容）", () => {
+    expect(
+      resolveAdminAuth({ ...base, adminConfigured: false, seedProvided: true, seedValid: true }),
+    ).toBe("ok");
+    expect(resolveAdminAuth({ ...base, adminConfigured: false })).toBe("unauthorized");
+    // 语义解释：adminConfigured=false + session 提供但无效 → 仍 401
+    expect(
+      resolveAdminAuth({ ...base, adminConfigured: false, sessionProvided: true, sessionValid: false }),
+    ).toBe("unauthorized");
+  });
+
+  it("两者皆未配置 → hidden（404：端点不存在）", () => {
+    expect(
+      resolveAdminAuth({ ...base, adminConfigured: false, seedConfigured: false }),
+    ).toBe("hidden");
+    expect(
+      resolveAdminAuth({
+        adminConfigured: false,
+        seedConfigured: false,
+        sessionProvided: true,
+        sessionValid: true,
+        seedProvided: true,
+        seedValid: true,
+      }),
+    ).toBe("hidden");
+  });
+
+  it("seed 配置存在但提供错误令牌 → forbidden（403）", () => {
+    expect(
+      resolveAdminAuth({ ...base, adminConfigured: false, seedProvided: true, seedValid: false }),
+    ).toBe("forbidden");
+  });
+});
 
 /**
  * 直接测纯函数 checkAdminToken：状态机的三个分支（ok / disabled / invalid）
