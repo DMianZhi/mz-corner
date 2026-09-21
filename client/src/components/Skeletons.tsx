@@ -63,7 +63,7 @@ export function ArticleListSkeleton({ rows = 6 }: { rows?: number }) {
  */
 export function PostSkeleton() {
   return (
-    <div aria-hidden className="mx-auto" style={{ maxWidth: 'var(--read-w)', padding: 'calc(var(--nav-h) + 48px) var(--gutter) 96px' }}>
+    <div aria-hidden className="mx-auto" style={{ maxWidth: 'var(--content-w)', padding: 'calc(var(--nav-h) + 48px) var(--gutter) 96px' }}>
       <TextPh text="██████████" style={{ fontSize: 13 }} />
       <div style={{ marginTop: 28 }}>
         <TextPh text="██████████████████████████" style={{ fontSize: 'clamp(28px,4vw,36px)', fontWeight: 700 }} />

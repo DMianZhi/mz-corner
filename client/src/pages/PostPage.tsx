@@ -93,7 +93,7 @@ export default function PostPage() {
       <article
         className="mx-auto"
         style={{
-          maxWidth: 'var(--read-w)',
+          maxWidth: 'var(--content-w)',
           padding: 'calc(var(--nav-h) + 48px) var(--gutter) 96px',
         }}
       >

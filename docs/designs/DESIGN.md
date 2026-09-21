@@ -242,8 +242,8 @@ html.light {
 
 ### 4.4 文章详情页 `/post/:id`
 
-- 正文容器：`max-width: var(--read-w)`（`clamp(720px, 64vw, 1000px)`），居中，padding 左右 `var(--gutter)`。
-  用视口相关值而非固定 760px：固定值在宽屏下只占 1/3 宽，正文挤在中间一条，观感很差。
+- 正文容器：`max-width: var(--content-w)`（1080px，与列表/归档/关于同宽），居中，padding 左右 `var(--gutter)`。
+  不再单设阅读宽度：详情页比信息页窄 320px 时，跨页跳转内容边缘错位、观感割裂。
 - 顶部：返回链接（mono，`← 文章列表`）→ 标题（H2 级）→ meta 行（日期 / 分类 / 阅读时长，mono Label，`text-3`）。
 - 阅读进度条：`position: fixed; top: 0; left: 0; height: 2px; background: var(--accent); transform-origin: left; scaleX = 阅读进度`。
 - 正文排版：Body 16px/1.8，段落间距 24px；`h2/h3` 上间距 48px/32px；代码块背景 `--bg-card`，边框 `--border`，radius 12px，mono 14px/1.6；行内代码 `--accent-dim` 底 + `--accent` 文字（深色）。
