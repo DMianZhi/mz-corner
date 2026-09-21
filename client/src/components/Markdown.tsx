@@ -89,6 +89,36 @@ function CodeBlock({ code, lang }: { code: string; lang?: string }) {
   );
 }
 
+/**
+ * 按「未转义的竖线」切分表格行。
+ *
+ * GFM 规定表格单元格里的 `\|` 表示字面量竖线，不参与分列。朴素的
+ * split('|') 会把它切开并留下一个多余的反斜杠，例如
+ * `| 分发 | nginx + irm\|iex 一键安装 |` 会渲染成 3 个单元格
+ * （`nginx + irm\` + `iex 一键安装`），第三格溢出表格宽度。
+ */
+function splitTableRow(line: string): string[] {
+  const cells: string[] = [];
+  let cur = '';
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '\\' && (line[i + 1] === '|' || line[i + 1] === '\\')) {
+      cur += line[i + 1]; // \| → |    \\ → \
+      i++;
+    } else if (ch === '|') {
+      cells.push(cur);
+      cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  cells.push(cur);
+  // 去掉行首/行尾「定界竖线」产生的空单元（首格真为空时不受影响）
+  if (cells[0]?.trim() === '') cells.shift();
+  if (cells.length > 1 && cells[cells.length - 1].trim() === '') cells.pop();
+  return cells.map((c) => c.trim());
+}
+
 /** 解析整篇 Markdown → ReactNode[] */
 export function Markdown({ source }: { source: string }) {
   const lines = source.replace(/\r\n/g, '\n').split('\n');
@@ -149,7 +179,7 @@ export function Markdown({ source }: { source: string }) {
       const rows: string[][] = [];
       const aligns: (string | null)[] = [];
       while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) {
-        const cells = lines[i].trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
+        const cells = splitTableRow(lines[i].trim());
         if (rows.length === 1 && cells.every((c) => /^:?-+:?$/.test(c))) {
           // 对齐行：:--- | ---: | :---:
           cells.forEach((c, idx) => {
