@@ -2,10 +2,10 @@
  * 云数据库文档 → 领域模型的映射。
  *
  * 字段名一一对应，这里只做「类型归一 + 缺省值兜底」，不含业务规则（业务规则在 service 层）。
- * 归一必须做：数据库是 schemaless 的，控制台手改、历史导入都可能塞进非预期类型。
+ * 归一必须做：数据库是 schemaless 的，控制台手改可能塞进非预期类型。
  */
 import type { Article, ArticleStatus, Comment, Project } from "~~/data/types";
-import { ARTICLE_STATUS, LEGACY_ARTICLE_STATUS, PROJECT_DEFAULTS } from "./collections";
+import { ARTICLE_STATUS, PROJECT_DEFAULTS } from "./collections";
 import type { DbDocument } from "./client";
 
 function str(value: unknown): string {
@@ -17,7 +17,7 @@ function num(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-/** 数组字段：兼容「真数组」与「逗号分隔字符串」两种历史形态 */
+/** 数组字段：库里存数组；控制台手填时可能是逗号分隔字符串，一并接受 */
 function list(value: unknown): string[] {
   if (Array.isArray(value)) return value.map((item) => str(item).trim()).filter(Boolean);
   return str(value)
@@ -28,9 +28,7 @@ function list(value: unknown): string[] {
 
 /** 状态归一：非法值一律归为草稿（宁可不上线，也不误发） */
 export function toArticleStatus(value: unknown): ArticleStatus {
-  const raw = str(value).trim();
-  const mapped = LEGACY_ARTICLE_STATUS[raw] ?? raw.toLowerCase();
-  return mapped === ARTICLE_STATUS.published ? "published" : "draft";
+  return str(value).trim().toLowerCase() === ARTICLE_STATUS.published ? "published" : "draft";
 }
 
 export function toArticle(document: DbDocument): Article {

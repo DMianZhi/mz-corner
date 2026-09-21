@@ -40,7 +40,6 @@ temp/
 # ── Workspace private ──
 memory/
 .wpscomate/
-.publish/
 thumbnail.png
 .subagents/
 
@@ -58,11 +57,7 @@ deploy/unicloud/cloudfunctions/*/nitro/
 /.hbuilderx/
 /unpackage/
 
-# ── 凭据导出文件（曾误入库，2026-09-20 修正）──
-.env.kdocs
-*.env.kdocs
-h3probe.tmp.mjs
 *.tmp.mjs
 
-# 本地验证用临时截图（不入库）
+# ── 本地临时文件（不入库）──
 .tmp-*

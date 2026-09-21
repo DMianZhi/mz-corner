@@ -5,7 +5,7 @@
  * 1. 用 aws-lambda 预设构建 Nitro —— 产出纯 handler，不含 HTTP 监听器
  *    （node-server 预设会自带监听器，node-listener 预设不含 handler，均不适用）
  * 2. 拷贝 .output/server → deploy/unicloud/cloudfunctions/mz-corner-api/nitro
- * 3. 清理 .output，避免与平台打包（pnpm run pack）的产物互相污染
+ * 3. 清理 .output，避免与旧构建产物互相污染
  */
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";

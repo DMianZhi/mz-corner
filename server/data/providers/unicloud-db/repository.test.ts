@@ -4,7 +4,7 @@
  * 用内存假库替身，验证「查询条件 + 翻页 + 字段归一 + 写回」这些真实会出错的环节，
  * 不需要连云环境。重点覆盖两处容易静默出错的地方：
  *   1. 翻页拉全量（超过单页上限后不能丢数据）
- *   2. 状态归一（非法/历史值不能把草稿当已发布放出去）
+ *   2. 状态归一（非法值不能把草稿当已发布放出去）
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { DbCollection, DbDocument, DbListResult, UniCloudDatabase } from "./client";
@@ -144,7 +144,7 @@ describe("UnicloudDbBlogRepository", () => {
         publishedArticle(),
         publishedArticle({ _id: "a2", status: "draft" }),
         publishedArticle({ _id: "a3", title: "" }),
-        publishedArticle({ _id: "a4", status: "已发布", tags: "React, Node.js", viewCount: "7" }),
+        publishedArticle({ _id: "a4", status: "Published", tags: "React, Node.js", viewCount: "7" }),
       ],
     });
     setUniCloudDatabase(database);
@@ -152,13 +152,13 @@ describe("UnicloudDbBlogRepository", () => {
     const articles = await repo.listArticles();
     expect(articles.map((a) => a.id)).toEqual(["a1", "a4"]);
 
-    const legacy = articles.find((a) => a.id === "a4")!;
-    // 历史中文状态值归一为领域值
-    expect(legacy.status).toBe("published");
-    // 逗号分隔字符串 → 数组
-    expect(legacy.tags).toEqual(["React", "Node.js"]);
+    const normalized = articles.find((a) => a.id === "a4")!;
+    // 状态大小写归一
+    expect(normalized.status).toBe("published");
+    // 控制台手填的逗号分隔字符串 → 数组
+    expect(normalized.tags).toEqual(["React", "Node.js"]);
     // 字符串数字 → number
-    expect(legacy.viewCount).toBe(7);
+    expect(normalized.viewCount).toBe(7);
   });
 
   it("非法状态值一律归为草稿（不误发）", async () => {

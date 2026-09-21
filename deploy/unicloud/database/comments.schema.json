@@ -32,10 +32,6 @@
     "createTime": {
       "bsonType": "string",
       "title": "发布时间（YYYY-MM-DD）"
-    },
-    "legacyArticleId": {
-      "bsonType": "string",
-      "title": "迁移前的原始文章ID（仅迁移留痕，可删）"
     }
   }
 }

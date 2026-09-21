@@ -22,8 +22,6 @@ export default defineNitroConfig({
   ],
   runtimeConfig: {
     logLevel: '3',
-    projectId: '',
-    appBaseEndpoint: '<endpoint>',
     nitro: {
       envPrefix: '',
     },

@@ -9,23 +9,13 @@
  └── /api/blog/* ──→ 云函数 mz-corner-api（Nitro handler）──→ uniCloud 云数据库
 ```
 
-## 为什么数据放在云数据库（结论，别反复试）
+## 为什么用云数据库
 
-原方案用 WPS 多维表当存储，实测三条路都堵死：
-
-- **技能渠道**：`POST https://api.wps.cn/office/v5/ai/skill_hub/token/create` 对企业账号直接回
-  `{"code":403,"message":"enterprise account not supported"}`；网关带企业 cookie 直连回 `403001`，
-  原文「企业用户请使用 WPS365 CLI」。**企业账号拿不到令牌**。
-- **个人账号能签发，但令牌与会话同生共死**：`expires_in` 看似一年（31535956 秒），实际
-  `wps_sid` 会话一断，令牌立刻 `401`，再调 `token/create` 得 `HTTP 401 {"code":200,"msg":"no login"}`。
-  **不能当服务器端长期凭据**。跨账号读企业表另有一道墙：`{"code":400100,"message":"第三方服务错误：无权限"}`。
-- **WPS365 开放平台**：官方 CLI 实测能读到企业表（数据链路是通的），但本地绑定的应用
-  `auth refresh --delegated` 回 `40100009 invalid_grant: refresh token not_found`、`auth status` 显示
-  `app: not_found`——应用已在服务端不存在，需重建。
-
-云数据库没有上述任何一道墙：**同服务空间、无第三方凭据、权限由云函数运行身份决定**，
+数据存在**同一个服务空间的云数据库**里：无第三方凭据、权限由云函数运行身份决定，
 且每个开发者账号的免费服务空间（阿里云 / 支付宝云各一个）本就包含数据库额度。
 
+集合权限一律设为 `false`（见 `database/*.schema.json`）：只有云函数（服务空间身份）能读写，
+浏览器拿不到直连权限，前端所有数据操作都经 `/api/blog/*`。
 ## 前置条件
 
 - 一个 uniCloud 服务空间（阿里云版 / 腾讯云版 / 支付宝云版均可；本项目实测为**支付宝云**）
@@ -36,7 +26,7 @@
   - 由 `deploy/unicloud/database/*.schema.json` 定义，`pnpm run deploy:unicloud` 会**自动上传建集合**，
     不需要在控制台手点
   - Schema 里权限一律 `false`：只有云函数（服务空间身份）能读写，前端拿不到直连权限
-  - 云数据库是 JSON 文档型、兼容 MongoDB 协议，字段名即领域模型（`title` / `content` / `viewCount`…）
+  - 云数据库是 JSON 文档型（MongoDB 协议），字段名即领域模型（`title` / `content` / `viewCount`…）
 
 ## 步骤 1：构建云函数产物
 
@@ -61,10 +51,9 @@ mz-corner-api/
 | `runtime` | `Nodejs18` | 支付宝云默认即 Nodejs18；**只在第一次上传时生效**，之后改需删掉云端函数重新上传 |
 | `timeout` | `20` | 默认仅 5 秒，冷启动 + 网关往返容易踩到；上限 120 秒 |
 | `memorySize` | `512` | 支付宝云默认 512MB |
-| `path` | `/mz-api` | ⚠️ **不负责 URL 化路径**，实测上传后网关仍报 50002（路由未注册）。URL 化路径必须在 Web 控制台配，见「步骤 4」 |
+| `path` | `/mz-api` | ⚠️ **不负责 URL 化路径**，实测上传后网关仍报 50002（路由未注册）。URL 化路径必须在 Web 控制台配，见「步骤 5」 |
 
-> 说明：`pnpm run pack` 产出的是平台托管用的 `node-listener` 预设，不含可调用入口，
-> 不能直接放进云函数；`build:unicloud` 用 `aws-lambda` 预设产出纯 `handler`。
+> 说明：`build:unicloud` 用 `aws-lambda` 预设产出纯 `handler`（自带 HTTP 监听器的预设不适用）。
 
 ## 步骤 2：上传云函数
 
@@ -164,7 +153,7 @@ pnpm run deploy:unicloud -- --skip-build  # 复用现有产物，只做上传 + 
 
 | 变量 | 必填 | 值 |
 |---|---|---|
-| `SEED_TOKEN` | 仅「B 路迁移」需要 | 自定一个长随机串，用于一次性数据迁移（`/api/admin/seed`）；**不配则该路由关闭（回 404）** |
+| `SEED_TOKEN` | 仅「B 路导入」需要 | 自定一个长随机串，用于批量导入（`/api/admin/seed`）；**不配则该路由关闭（回 404）** |
 | `CORS_ORIGIN` | 建议 | 静态站域名（不填为 `*`） |
 | `UNICLOUD_URL_PREFIX` | 改了前缀才需要 | URL 化前缀，默认 `/mz-api` |
 | `NITRO_BLOG_PROVIDER` | 否 | 数据源实现名，默认 `unicloud-db`；仅将来替换数据源时用 |
@@ -187,23 +176,16 @@ pnpm run deploy:unicloud -- --skip-build  # 复用现有产物，只做上传 + 
 > `Data source plugin initialized (provider=..., db=ready|unavailable)`。
 > 配了变量却不见效时，先看这行，再看具体报错。
 
-## 步骤 4：首次数据迁移（把多维表备份灌进云数据库）
+## 步骤 4：把数据导入云数据库
 
-> ⚠️ **本节是历史记录**：转换脚本 `scripts/migrate-from-dbsheet.mjs` 已在
-> `59f778e chore(cleanup): 清除 WPS/App Studio 遗留代码与无关文件` 中移除
-> （它直连 WPS 多维表备份，属一次性工具），下文命令里的 `migrate:unicloud` 现已不存在。
-> 仓库现存的只有后半段 `scripts/export-init-data.mjs`（转换产物 → `init_data.json`）
-> 与服务端 seed 路由 `POST /api/admin/seed`。线上数据已迁移完成，日常无需重跑。
+数据文件**不进版本库**（评论含读者邮箱）。两条路，按「要不要 SEED_TOKEN」选：
 
-备份目录（**仓库外**，含 4 份 sheet JSON）默认取 `<local-path>/data/work/mz-corner-数据备份`，
-可用 `--from` 指定。两条路灌的是同一份备份，按「要不要 SEED_TOKEN」选：
-
-| | **A. 初始化数据文件**（已实测走通） | **B. seed 路由** |
+| | **A. 初始化数据文件** | **B. seed 路由** |
 |---|---|---|
 | 前提 | 只要 CLI + 已关联服务空间 | 云函数环境变量 `SEED_TOKEN`（**只能在 Web 控制台配**） |
-| 命令 | `export:init-data` → `--initdatabase` | `migrate:unicloud --base … --token …` |
+| 命令 | `export:init-data` → `--initdatabase` | `POST /api/admin/seed` |
 | 幂等 | ❌ **追加插入**，重跑报 `_id` 重复 | ✅ `mode=replace` 先清空再写 |
-| 适合 | 首次灌数据 | 重跑、纠错、从备份恢复 |
+| 适合 | 空库首次灌入 | 改数据、删数据、重跑 |
 
 ### 路 A：初始化数据文件（不需要 SEED_TOKEN）
 
@@ -212,21 +194,18 @@ pnpm run deploy:unicloud -- --skip-build  # 复用现有产物，只做上传 + 
 `.gitignore` 内，真实数据不入库）：
 
 ```bash
-# 1. 转换备份 → 中间产物（不写库）
-pnpm run migrate:unicloud -- --out /tmp/payload.json
+# 1. 领域文档 → 初始化数据文件（顺带生成文章 _id，并把评论按标题关联到该 _id）
+node scripts/export-init-data.mjs --in payload.json
 
-# 2. 中间产物 → 初始化数据文件（顺带生成文章 _id，并把评论按标题关联到该 _id）
-node scripts/export-init-data.mjs --in /tmp/payload.json
-
-# 3. 上传（会一并上传 schema 与初始数据）
+# 2. 上传（会一并上传 schema 与初始数据）
 "<local-path>/HBuilderX/cli.exe" cloud functions --initdatabase --prj mz-corner --provider alipay
 
-# 4. 验证
+# 3. 验证
 node scripts/verify-unicloud-deploy.mjs
 ```
 
 > **为什么要自己生成 `_id`**：初始化数据是「一次性写文件」，没法像 B 路那样先插文章、
-> 回读真实 id、再插评论。所以文章 id 由脚本按备份表顺序生成（`art-01`…，顺序稳定 ⇒
+> 回读真实 id、再插评论。所以文章 id 由脚本按数组顺序生成（`art-01`…，顺序稳定 ⇒
 > id 稳定），评论的 `articleId` 同步指向它。实测线上：`art-02` 挂 1 条、`art-05` 挂 4 条，
 > 关联全部有效。
 >
@@ -237,30 +216,15 @@ node scripts/verify-unicloud-deploy.mjs
 
 ### 路 B：seed 路由（可重跑、可清理）
 
-脚本依次做：
+`POST /api/admin/seed`，请求头带 `x-seed-token`（与环境变量 `SEED_TOKEN` 一致），
+请求体是一批领域文档，集合名即键名：
 
-1. 解析每份的 `records[].fields`（**是 JSON 字符串，需二次解析**）
-2. 字段归一：`标题→title`、`标签→tags`（拆逗号）、`发布时间→publishDate`（转 `YYYY-MM-DD`）、`已发布→published`
-3. 写入文章 / 项目 / 配置 → 回读文章列表建立「标题 → 新 `_id`」→ 据此解析评论归属 → 写入评论
-4. 逐篇回读评论数，确认关联生效
-
-```bash
-# 只转换，产出可检查的 JSON（不写库）
-pnpm run migrate:unicloud -- --out ./migrated.json
-
-# 真实迁移
-pnpm run migrate:unicloud --   --base https://<unicloud-space-id>.dev-hz.cloudbasefunction.cn/mz-api   --token <SEED_TOKEN>
+```json
+{ "articles": [], "projects": [], "siteConfig": [], "comments": [] }
 ```
 
-> **评论归属为什么要重算**：原表「文章ID」列是 `MultiLineText` 手填文本（值为 `d` / `e` / `f`），
-> 与文章记录 id（`8` / `9` / `-` / `_` / `BA`…）**本就对不上**，是无效关联。
-> 脚本按评论内容判定归属（「TypeScript 很实用！」→《TypeScript 5.0 最佳实践》、
-> 「年终总结很真实」→《我的 2024 年终总结》），判不出来的落到最早发布的文章，
-> 并把原值写进 `legacyArticleId` 便于人工纠正。迁移时会打印这张映射表。
-
-> 迁移**幂等**：`mode=replace` 先清空对应集合再写入，重跑不会产生重复数据。
-> 请求体约 108KB（23 篇文章全文），远低于支付宝云 32MB 的 Body 上限。
-
+每个集合可带 `mode: "replace"` 先清空再写；回执里带 `cleared` / `inserted` / `total`，
+本身就是一次校验。评论的 `articleId` 指向文章 `_id`（与 A 路一致）。
 ## 步骤 5：配置云函数 URL 化（必须手动，在 Web 控制台）
 
 > ⚠️ 实测确认：`cloudfunction-config.path` **不会**替你配 URL 化路由。
@@ -446,9 +410,8 @@ uniCloud 云函数要返回 `{ statusCode, headers, body }` 这种「集成响�
 ## 注意事项
 
 - **无凭据**：数据源是同服务空间的云数据库，句柄由云函数运行时注入，
-  不存在「令牌过期导致线上 500」这一类故障。唯一的密钥是 `SEED_TOKEN`，且只用于一次性迁移。
-- **数据备份**：迁移源（多维表导出）留在仓库外的 `<local-path>/data/work/mz-corner-数据备份/`，
-  不进版本库；云数据库本身也可在控制台导出。
+  不存在「令牌过期导致线上 500」这一类故障。唯一的密钥是 `SEED_TOKEN`，且只用于批量导入。
+- **数据备份**：数据本身不进版本库；云数据库可在控制台导出备份。
 - **跨域**：静态托管与云函数不同源，适配层已内置 CORS（含预检短路）。
   生产环境建议把 `CORS_ORIGIN` 设为静态站域名，避免开放给任意来源。
 - **写接口**：评论提交、阅读数写回是公开写操作，如需限制请自行加校验。
@@ -471,7 +434,7 @@ uniCloud 云函数要返回 `{ statusCode, headers, body }` 这种「集成响�
 | `POST /api/admin/seed` 回 **404** | 云端没读到 `SEED_TOKEN`（未配置，或以为 `.env` 会随上传同步） | 到控制台云函数「环境变量」里配；CLI 与 `.env` 都传不上去（实测） |
 | 自检第 3 项「跨域响应头 (CORS)」失败 | 真实响应缺 `access-control-allow-origin` | 把云函数环境变量 `CORS_ORIGIN` 设为前端域名（不设则为 `*`） |
 | 浏览器里 POST 报 `Failed to fetch`、GET 正常 | 该请求带了 `application/json` → 触发预检 → 被网关截住 | 前端写请求用 `text/plain` 发 JSON（已内置）；服务端 `readJsonBody` 两种都收 |
-| 接口 200 但列表恒为空 | 数据还没迁进云数据库 | 跑一次「步骤 4」的数据迁移（迁移后 `posts` 应有 23 篇） |
+| 接口 200 但列表恒为空 | 云数据库里还没有数据 | 按「步骤 4」导入数据（`posts` 应有 23 篇） |
 | 前端报 CORS | `CORS_ORIGIN` 与静态站域名不一致，或未配安全域名 | 云函数「安全域名」里放行前端域名，并把 `CORS_ORIGIN` 改成静态站实际域名（或留空为 `*`） |
 | 全部 404 | URL 化前缀与请求路径不匹配 | 核对控制台里配的访问路径与请求 URL 前缀是否一致（本项目为 `/mz-api`），不一致时同步设 `UNICLOUD_URL_PREFIX` |
 | 首次调用超时 / 504 | 云函数超时默认仅 5 秒 | 产物已设 `timeout: 20`；若改过，在控制台调大 |

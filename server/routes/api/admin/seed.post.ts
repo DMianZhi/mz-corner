@@ -4,11 +4,11 @@ import { readJsonBody } from "~~/utils/body";
 import { errorMessage } from "~~/utils/errors";
 
 /**
- * POST /api/admin/seed — 把一批领域文档写入云数据库（数据迁移 / 从备份恢复）。
+ * POST /api/admin/seed — 把一批领域文档批量写入云数据库。
  *
  * 为什么需要这个端点：云数据库只能在云函数内访问，本地脚本没有直连路径。
- * 所以迁移脚本在本地把数据转成领域文档，再 POST 上来由云函数落库——
- * **数据本身因此不进 git**（备份含评论者邮箱，不能进公开仓库）。
+ * 所以本地把数据转成领域文档，再 POST 上来由云函数落库——
+ * **数据本身因此不进 git**（评论含读者邮箱，不能进公开仓库）。
  *
  * 鉴权：请求头 x-seed-token 必须与环境变量 SEED_TOKEN 一致。
  * 未配置 SEED_TOKEN 时该端点返回 404（功能关闭，且不暴露管理端点存在）。
@@ -73,7 +73,7 @@ export default defineEventHandler(async (event) => {
     }
   } catch (error: unknown) {
     console.error("[admin/seed]", errorMessage(error));
-    // 带上已完成的进度：迁移是幂等的（replace 模式可重跑），重试时能知道断在哪
+    // 带上已完成的进度：写入是幂等的（replace 模式可重跑），重试时能知道断在哪
     throw createError({
       statusCode: 500,
       statusMessage: `seed failed: ${errorMessage(error)} (progress: ${JSON.stringify(report)})`,

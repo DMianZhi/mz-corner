@@ -12,11 +12,11 @@
 
 ## 路由
 - 必须使用 `HashRouter`，**禁止使用 `BrowserRouter`**。
-  部署平台会将应用挂载到子路径（如 `/app/<id>/<slug>/`），`BrowserRouter` 无法匹配。
+  静态托管不配置 SPA 回退，路由全在 `#/` 之后，`BrowserRouter` 会 404。
 
 ## API 请求
-- fetch 调用必须使用**相对路径** `./api/...`，**禁止使用绝对路径** `/api/...`。
-  部署后应用在子路径下，绝对路径会跳过子路径前缀导致 404。
+- fetch 调用统一走 `services/blog-api.ts`：以 `VITE_API_BASE` 为前缀（构建时注入云函数 URL），
+  未配置时回落到相对路径 `./api/...`。
 
 ## React
 - 不使用 `useMemo`/`useCallback`（React 编译器自动处理）。尽量避免 `useEffect`。
@@ -32,4 +32,4 @@
 - 禁止直连外部 API（第三方服务、云数据库等），所有数据操作通过服务端路由。
 
 ## 命令
-`pnpm run dev`、`pnpm run build`、`pnpm run pack:frontend`、`pnpm run lint`、`pnpm run check:types`。
+`pnpm run dev`、`pnpm run build`、`pnpm run lint`、`pnpm run check:types`、`pnpm test`。

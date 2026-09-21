@@ -87,7 +87,7 @@ export async function getSiteConfig(): Promise<SiteConfig> {
   return getBlogRepository().getSiteConfig();
 }
 
-/** 日期字符串 → 时间戳（兼容 YYYY/MM/DD 与 YYYY-MM-DD），无法解析时为 0 */
+/** 日期字符串 → 时间戳（YYYY/MM/DD 与 YYYY-MM-DD 都能解析），无法解析时为 0 */
 function toTime(value: string): number {
   if (!value) return 0;
   const normalized = value.replace(/-/g, "/");

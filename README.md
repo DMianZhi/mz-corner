@@ -37,8 +37,8 @@ pnpm run lint
 pnpm run check:types
 pnpm test
 
-# 打包
-pnpm run pack
+# 构建前端（产物在 client/dist）
+pnpm run build
 ```
 
 ### 环境变量
@@ -50,7 +50,7 @@ pnpm run pack
 BLOG_DATA_PROVIDER=unicloud-db
 ```
 
-只有「B 路数据迁移」需要 `SEED_TOKEN`（配在云函数环境变量上，且**只能在 Web 控制台配**——
+只有「B 路数据导入」需要 `SEED_TOKEN`（配在云函数环境变量上，且**只能在 Web 控制台配**——
 CLI 与云函数目录里的 `.env` 都传不上去，实测）。不想碰控制台就走 A 路：用
 `init_data.json` + CLI `--initdatabase` 灌数据，见 [部署文档](deploy/unicloud/README.md)。
 
@@ -70,7 +70,7 @@ data/providers/unicloud-db/ uniCloud 云数据库实现
   ├── collections.ts        集合名 / 分页 / 语义常量
   ├── client.ts             数据库句柄获取（云函数运行时注入 uniCloud 全局）
   ├── mappers.ts            云数据库文档 ↔ 领域模型（类型归一 + 缺省兜底）
-  ├── admin.ts              迁移用：清空 / 计数 / 批量写入
+  ├── admin.ts              批量导入用：清空 / 计数 / 批量写入
   └── repository.ts         组装为 BlogRepository
 ```
 
@@ -79,9 +79,8 @@ data/providers/unicloud-db/ uniCloud 云数据库实现
 service 与 route 零改动。
 
 **字段名即领域模型**：集合里存的就是 `title` / `content` / `viewCount` 这样的领域字段，
-不再有「表头中文名 → 领域字段」的映射层（那是多维表时代的产物），控制台里看到的数据可直接排障。
-读取侧仍做类型归一（数据库是 schemaless 的，控制台手改可能塞进非预期类型），
-并兼容历史中文状态值（`已发布` → `published`）。
+控制台里看到的数据可直接排障。读取侧仍做类型归一（数据库是 schemaless 的，
+控制台手改可能塞进非预期类型）。
 
 **配置注入**：数据层不读运行期 `process.env`（平台可能同进程托管多个项目），
 由 `nitro.config.ts` 的 `runtimeConfig.blog` 声明、`plugins/data-source.ts` 启动时注入。
@@ -121,7 +120,7 @@ cd client && pnpm test    # 仅前端：Markdown 渲染器 + 相邻篇选取
 │   ├── data/             # 数据层：接口 + provider 注册表
 │   │   └── providers/unicloud-db/  # 云数据库实现（collections / client / mappers / admin / repository）
 │   └── plugins/          # data-source.ts：启动时把配置注入数据层
-├── scripts/              # 构建 / 部署 / 迁移 / 自检脚本
+├── scripts/              # 构建 / 部署 / 自检脚本
 ├── deploy/unicloud/      # 云函数产物 + database/*.schema.json
 └── docs/designs/         # DESIGN.md 设计规范
 ```
@@ -129,16 +128,15 @@ cd client && pnpm test    # 仅前端：Markdown 渲染器 + 相邻篇选取
 ## 部署
 
 线上形态：**静态前端（前端网页托管）+ API（云函数）+ 数据（同服务空间云数据库）**。
-完整步骤（含首次数据迁移）见 [`deploy/unicloud/README.md`](deploy/unicloud/README.md)。
+完整步骤（含数据导入）见 [`deploy/unicloud/README.md`](deploy/unicloud/README.md)。
 
 ```bash
 pnpm run build:unicloud           # 产出 deploy/unicloud/cloudfunctions/mz-corner-api
 pnpm run deploy:unicloud          # 构建 + 同步产物 + 上传集合 Schema + CLI 上传 + 自检
 
-# 首次灌数据（一次性，线上已完成；详见部署文档「步骤 4」）
-# A. 初始化数据文件（不需要 SEED_TOKEN）：转换产物 → init_data.json，再走 CLI --initdatabase
-node scripts/export-init-data.mjs --in <转换产物.json>
-# B. seed 路由（幂等，可重跑/清理）：POST /api/admin/seed，需云函数环境变量 SEED_TOKEN
+# 数据导入（两条路，详见部署文档「步骤 4」）
+node scripts/export-init-data.mjs --in payload.json   # A: 领域文档 → init_data.json，再走 CLI --initdatabase
+# B: POST /api/admin/seed（幂等可重跑，需云函数环境变量 SEED_TOKEN）
 
 # 前端（uniCloud 前端网页托管；CLI 可直接传，见部署文档「步骤 6」）
 cd client && rm -rf dist && VITE_API_BASE=<URL化地址> pnpm run build && cd ..
@@ -146,10 +144,6 @@ cd client && rm -rf dist && VITE_API_BASE=<URL化地址> pnpm run build && cd ..
 "<HBuilderX>/cli.exe" hosting deploy --prj mz-corner --provider alipay \
   --space <unicloud-space-id> --source client/dist
 ```
-
-> **备份转换脚本已移除**：`scripts/migrate-from-dbsheet.mjs`（WPS 多维表备份 → 转换产物）
-> 在「清除 WPS 遗留代码」提交里删掉了——它直连 WPS 备份，属一次性工具。仓库保留的是
-> 后半段 `export-init-data.mjs` 与服务端 seed 路由。要重新灌库，需先补回转换步骤。
 
 线上入口：<https://<unicloud-space-id>-static.normal.cloudstatic.cn/>
 （`/` 会 302 到 `/index.html`——该托管的「索引文件」是路径语义，这个尾巴消不掉，已实测接受。
@@ -166,7 +160,7 @@ node scripts/verify-unicloud-deploy.mjs <URL化地址> [前端域名]
 云函数侧环境变量只需两个：
 
 ```ini
-SEED_TOKEN=<一次性迁移令牌>
+SEED_TOKEN=<批量导入令牌>
 CORS_ORIGIN=<静态站域名>
 ```
 

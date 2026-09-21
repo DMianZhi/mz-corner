@@ -1,24 +1,23 @@
 #!/usr/bin/env node
 /**
- * 把 migrate-from-dbsheet.mjs 的转换结果落成 uniCloud 的「初始化数据」文件。
+ * 把领域文档的中间产物落成 uniCloud 的「初始化数据」文件。
  *
  * 用途：在没有 SEED_TOKEN（云函数环境变量只能在 Web 控制台配置）的情况下，
  * 也能把数据灌进云数据库——走 uniCloud 原生的 `表名.init_data.json` 机制，
  * 由 CLI 的 `--initdatabase` 上传，全程不需要界面操作。
  *
  * 用法：
- *   node scripts/migrate-from-dbsheet.mjs --out /tmp/payload.json   # 只转换，不写库
- *   node scripts/export-init-data.mjs --in /tmp/payload.json        # 生成初始化文件
+ *   node scripts/export-init-data.mjs --in payload.json             # 生成初始化文件
  *   cli cloud functions --initdatabase --prj mz-corner --provider alipay
  *
  * 产物落在 uniCloud-<provider>/database/ 下，而 uniCloud-* 已在 .gitignore 内
  * ——真实数据不会进入仓库（红线）。
  *
  * 两个关键点：
- * 1. **显式指定 `_id`**：初始化数据是「一次性写文件」，没法像 HTTP 播种那样先插文章
+ * 1. **显式指定 `_id`**：初始化数据是「一次性写文件」，没法像 seed 端点那样先插文章
  *    再回读 id。所以文章 id 在这里生成，评论的 articleId 同步指向它，保证关联有效。
- * 2. 评论的 articleId 在 migrate 的中间产物里**存的是文章标题**（HTTP 播种时再换成
- *    真实 id），这里把它换成第 1 步生成的 `_id`。
+ * 2. 中间产物里评论的 articleId **存的是文章标题**（走 seed 端点时再换成真实 id），
+ *    这里把它换成第 1 步生成的 `_id`。
  */
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -52,7 +51,7 @@ const projects = Array.isArray(payload.projects) ? payload.projects : [];
 const siteConfig = Array.isArray(payload.siteConfig) ? payload.siteConfig : [];
 const comments = Array.isArray(payload.comments) ? payload.comments : [];
 
-// 1. 文章 id：按备份表顺序生成稳定 id（顺序稳定 ⇒ id 稳定 ⇒ 评论关联可复现）
+// 1. 文章 id：按数组顺序生成稳定 id（顺序稳定 ⇒ id 稳定 ⇒ 评论关联可复现）
 const titleToId = new Map();
 const articleDocs = articles.map((article, index) => {
   const _id = `art-${String(index + 1).padStart(2, "0")}`;

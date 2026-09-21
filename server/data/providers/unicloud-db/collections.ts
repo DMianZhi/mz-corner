@@ -2,8 +2,7 @@
  * 云数据库集合约定与语义常量。
  *
  * 集合里存的是**领域文档**（字段名与 BlogRepository 的领域模型一一对应），
- * 不再有「表头中文名 → 领域字段」的映射层——那是多维表时代的产物。
- * 这带来一个直接好处：控制台里看到的数据就是领域模型，排障不用二次翻译。
+ * 控制台里看到的数据就是领域模型，排障不用二次翻译。
  */
 
 /** 集合名（与 uniCloud-alipay/database/*.schema.json 一一对应） */
@@ -38,11 +37,6 @@ export const ARTICLE_STATUS = {
   draft: "draft",
 } as const;
 
-/** 历史数据兼容：多维表时代的中文状态值 → 领域语义值 */
-export const LEGACY_ARTICLE_STATUS: Record<string, string> = {
-  已发布: ARTICLE_STATUS.published,
-  草稿: ARTICLE_STATUS.draft,
-};
 
 /** 项目缺省值（字段留空时的兜底，与具体数据源无关） */
 export const PROJECT_DEFAULTS = {

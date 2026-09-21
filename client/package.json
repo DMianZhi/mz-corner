@@ -7,7 +7,6 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "pack:frontend": "vite build && node ../scripts/zip-dir.mjs dist ../.publish/dist-frontend.zip",
     "lint": "oxlint -c ../.oxlintrc.json src/",
     "check:types": "tsc --noEmit",
     "test": "vitest run"

@@ -21,8 +21,8 @@ export class UnicloudDbBlogRepository implements BlogRepository {
   readonly name = "unicloud-db";
 
   async listArticles(): Promise<Article[]> {
-    // 刻意不在查询条件里写 status：状态归一（含历史中文值兼容）发生在 mappers，
-    // 若把过滤放在 DB 层，库里的「已发布」这类历史值会因条件不匹配而整批消失。
+    // 刻意不在查询条件里写 status：状态归一（大小写、非法值兜底）发生在 mappers，
+    // 若把过滤放在 DB 层，库里写法稍有出入的文档会因条件不匹配而整批消失。
     // 博客量级下多读几篇草稿的代价可以忽略，换的是「内容不会莫名不见」。
     const documents = await fetchAll(
       getDatabase().collection(COLLECTIONS.articles),

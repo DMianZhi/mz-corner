@@ -21,13 +21,15 @@ Nitro 自动注册常用函数，路由文件**无需手动 import**：
 ## 运行时配置
 - 在 `nitro.config.ts` 的 `runtimeConfig` 中声明配置项及默认值。
 - 在路由中通过 `useRuntimeConfig()` 读取。
-- **禁止直接 `process.env`**：平台在同一进程中运行多个项目，`process.env` 是全局共享的。
+- **禁止直接 `process.env`**：用 `useRuntimeConfig()`；其取值在构建期内联进产物，
+  运行期改普通环境变量无效（需要覆盖请用 `NITRO_*` 前缀）。
 
 ## 禁止事项
-- `http.createServer()` / `server.listen()`：平台管理服务生命周期。
+- `http.createServer()` / `server.listen()`：云函数由平台托管生命周期。
 - `process.env.XXX`：使用 `useRuntimeConfig()` 替代。
 - Express / Koa 等框架：必须用 Nitro。
 - 模块顶层有状态单例：平台可能随时回收实例。
 
 ## 命令
-`pnpm run dev`、`pnpm run build`、`pnpm run pack:server`、`pnpm run lint`、`pnpm run check:types`。
+`pnpm run dev`、`pnpm run lint`、`pnpm run check:types`、`pnpm test`。
+构建云函数产物在仓库根执行 `pnpm run build:unicloud`。

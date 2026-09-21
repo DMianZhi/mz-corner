@@ -162,7 +162,7 @@ if (postsRes.error || postsRes.status !== 200) {
     record(
       "GET /api/blog/posts",
       false,
-      "接口通但返回 0 条：检查云数据库 articles 集合是否有 status=published 的文章（数据未迁移时先跑 pnpm run migrate:unicloud）",
+      "接口通但返回 0 条：检查云数据库 articles 集合是否有 status=published 的文章",
     );
   } else {
     record("GET /api/blog/posts", true, `${items.length} 条，首条标题：${items[0]?.title ?? "(无标题)"}`);

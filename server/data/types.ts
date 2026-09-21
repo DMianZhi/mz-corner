@@ -2,16 +2,11 @@
  * 领域模型与仓储契约（与具体服务商无关）。
  *
  * 这一层是整个数据访问的边界：上层（service / route）只认这里的类型和接口，
- * 不认识 WPS 多维表、字段中文名、CLI 或任何具体实现。
+ * 不认识云数据库、集合名或任何具体实现。
  * 更换数据源 = 新写一个实现 BlogRepository 的 provider，无需改动上层。
  */
 
-/**
- * 文章发布状态。
- *
- * 领域语义值即存库值（published / draft），不再沿用多维表时代的「已发布 / 草稿」——
- * 读取时会做一次兼容归一（见 providers/unicloud-db/mappers.ts），因此历史数据不会丢。
- */
+/** 文章发布状态：领域语义值即存库值（published / draft）。 */
 export type ArticleStatus = "published" | "draft";
 
 export interface Article {

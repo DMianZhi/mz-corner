@@ -23,7 +23,7 @@ function makeArticle(partial: Partial<Article> & { id: string }): Article {
   };
 }
 
-/** 内存假仓储：证明业务层只依赖接口，可脱离 WPS 测试 */
+/** 内存假仓储：证明业务层只依赖接口，可脱离真实数据源测试 */
 class FakeRepository implements BlogRepository {
   readonly name = "fake";
 

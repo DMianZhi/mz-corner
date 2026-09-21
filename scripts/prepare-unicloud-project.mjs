@@ -71,17 +71,14 @@ Schema 里权限一律 \`false\`——只有云函数（服务空间身份）能
 1. 控制台 → 云函数 → \`mz-corner-api\` → 环境变量，添加：
    | 变量 | 值 |
    |---|---|
-   | \`SEED_TOKEN\` | 自定一个长随机串（一次性数据迁移用；不配则 \`/api/admin/seed\` 关闭） |
+   | \`SEED_TOKEN\` | 自定一个长随机串（批量导入用；不配则 \`/api/admin/seed\` 关闭） |
    | \`CORS_ORIGIN\` | 静态站域名（可选，默认 \`*\`） |
 
    数据源是**同服务空间的云数据库**，不需要任何第三方凭据。
 
 2. 控制台 → 云函数 → \`mz-corner-api\` → **URL 化**，设置路径前缀
-3. 首次部署后灌数据（本地那份多维表备份 → 云数据库）：
-
-   \`\`\`bash
-   pnpm run migrate:unicloud -- --base https://<spaceId>.../mz-api --token <SEED_TOKEN>
-   \`\`\`
+3. 首次部署后灌数据（领域文档 → 云数据库）：POST \`/api/admin/seed\`，
+   带 \`x-seed-token\` 请求头。数据不入库，详见 \`deploy/unicloud/README.md\`。
 
 4. 前端构建时指向该地址：
 

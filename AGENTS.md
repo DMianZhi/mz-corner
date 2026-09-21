@@ -2,13 +2,14 @@
 
 ## 架构
 - 工作区包含两个子包：`client/`（Vite + React 19 + Tailwind 4 + shadcn）和 `server/`（Nitro 2）。
-- 前端构建为静态文件（`dist-frontend.zip`），部署到 app-runtime（Nginx）。
-- 后端构建为 Nitro node preset（`.output/` 打包为 `dist-server.zip`），部署到 app-runtime-be。
+- 前端构建为静态文件（`client/dist`），部署到 uniCloud 前端网页托管。
+- 后端构建为云函数产物（`deploy/unicloud/cloudfunctions/mz-corner-api`），部署到 uniCloud 云函数。
+- 数据存在同服务空间的云数据库，只能由云函数访问。
 
 ## 开发流程
 
 ```
-pnpm run dev → 编码 → pnpm run pack（每次改完代码都要执行）
+pnpm run dev → 编码 → pnpm run lint && pnpm run check:types && pnpm test
 ```
 
 ### 1. 启动开发环境
@@ -30,13 +31,17 @@ pnpm run dev
 ```bash
 pnpm run lint          # oxlint 代码检查
 pnpm run check:types   # TypeScript 类型检查
+pnpm test              # 前后端单测
 ```
-两个命令都会同时检查前端和后端。确保零错误再提交。
+三个命令都会同时检查前端和后端。确保零错误再提交。
 
-### 4. 打包部署
+### 4. 构建与部署
 ```bash
-pnpm run pack            # 同时打包前端和后端
+pnpm run build:unicloud    # 云函数产物
+pnpm run deploy:unicloud   # 构建 + 上传集合 Schema + 上传云函数 + 自检
 ```
+
+前端构建与部署细节见 [`deploy/unicloud/README.md`](deploy/unicloud/README.md)。
 
 ## 开发规范
 - 前端：见 [`client/AGENTS.md`](client/AGENTS.md)
