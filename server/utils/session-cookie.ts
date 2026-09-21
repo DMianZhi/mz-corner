@@ -1,6 +1,8 @@
 import { createError, getCookie, type H3Event } from "h3";
 import { SESSION_COOKIE_NAME, SESSION_TTL_SEC, verifySession } from "./session";
 
+export { SESSION_COOKIE_NAME };
+
 /**
  * 管理端 Cookie 会话（h3 事件层）：读、设、清、验。
  *

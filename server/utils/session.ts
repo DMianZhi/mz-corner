@@ -27,6 +27,9 @@ export interface SessionPayload {
 /** 会话时长（秒）：7 天 */
 export const SESSION_TTL_SEC = 7 * 24 * 60 * 60;
 
+/** 管理端会话 Cookie 名（HttpOnly，JS 不可读；session-cookie.ts 按此读写） */
+export const SESSION_COOKIE_NAME = "mz_admin_session";
+
 /** 时钟漂移容忍（秒）：过期后该窗口内仍视为有效 */
 const CLOCK_SKEW_SEC = 60;
 
