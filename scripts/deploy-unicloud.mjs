@@ -157,7 +157,8 @@ if (!args["skip-verify"]) {
 
 console.log("\n✔ 部署流程结束。");
 console.log("  URL 化路径（/mz-api）与 SEED_TOKEN 环境变量仍需在 Web 控制台配置（CLI 不提供这两项）。");
-console.log("  首次部署后还要把数据灌进云数据库：pnpm run migrate:unicloud -- --base <URL化地址> --token <SEED_TOKEN>");
+console.log("  首次部署后还要把数据灌进云数据库：pnpm run export:init-data 生成 init_data 文件，");
+console.log("  再用 cli cloud functions --initdatabase 灌入（详见 deploy/unicloud/README.md）。");
 
 /** 从 `--list space` 输出里取服务空间 id，拼出 URL 化默认地址。 */
 function deriveVerifyUrl(cliPath) {
