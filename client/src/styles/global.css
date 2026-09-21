@@ -89,7 +89,7 @@
   --gutter: clamp(20px, 4.5vw, 72px);
   --container: 1520px;
   --content-w: 1080px; /* 信息页统一内容宽度（列表/归档/关于） */
-  --read-w: 760px;     /* 阅读页宽度（文章详情） */
+  --read-w: clamp(720px, 64vw, 1000px); /* 阅读页宽度（文章详情）：随视口放大，避免宽屏下正文挤成中间一条 */
   --nav-h: 64px;
   --bg-nav-scrolled: rgba(10, 10, 11, 0.55);
 

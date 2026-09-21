@@ -63,3 +63,6 @@ deploy/unicloud/cloudfunctions/*/nitro/
 *.env.kdocs
 h3probe.tmp.mjs
 *.tmp.mjs
+
+# 本地验证用临时截图（不入库）
+.tmp-*

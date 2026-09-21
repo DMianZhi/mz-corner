@@ -101,7 +101,9 @@ export default function PostPage() {
           <ArrowLeftIcon size={13} />
           文章列表
         </a>
-        <h1 className="text-h2-site" style={{ margin: '24px 0 16px', color: 'var(--text-1)' }}>
+        {/* textWrap: balance —— 标题在宽栏下容易把末字甩到第二行（如「…好体 / 验」），
+            交给浏览器均分两行，观感稳定 */}
+        <h1 className="text-h2-site" style={{ margin: '24px 0 16px', color: 'var(--text-1)', textWrap: 'balance' }}>
           {article.title}
         </h1>
         <div className="font-mono-site flex flex-wrap gap-4" style={{ fontSize: 12, color: 'var(--text-3)' }}>
