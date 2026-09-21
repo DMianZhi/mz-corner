@@ -10,7 +10,7 @@
 
 - **Hero**：错位大字排版 + 鼠标视差 + 坐标/SCROLL 元信息
 - **项目长廊**：纵向滚动驱动横向位移，卡片随鼠标 3D 倾斜 + 高光追踪，底部进度条随当前项目变色
-- **文章**：窄栏阅读排版 + 阅读进度条 + Markdown 渲染（表格/代码块/复制按钮）
+- **文章**：窄栏阅读排版 + 阅读进度条 + Markdown 渲染（表格/代码块/复制按钮）+ 上一篇/下一篇连续阅读
 - **骨架屏**：与真实内容像素级对齐（隐形字符撑几何 + 微光色块条），数据加载零跳动
 - **细节**：磁吸邮箱（统一指针状态机，快速甩动不闪烁）、SVG 图标库、深浅双主题、`prefers-reduced-motion` 降级
 
@@ -21,7 +21,7 @@
 | 前端 | React 19 · Vite · Tailwind CSS 4 · HashRouter |
 | 后端 | Nitro 2（h3）· 静态托管 + API 一体 |
 | 数据 | uniCloud 云数据库（文章 / 评论 / 项目 / 站点配置 四个集合） |
-| 工具链 | pnpm workspace · oxlint · TypeScript |
+| 工具链 | pnpm workspace · oxlint · TypeScript · Vitest |
 
 ## 快速开始
 
@@ -35,6 +35,7 @@ pnpm run dev
 # 质量检查
 pnpm run lint
 pnpm run check:types
+pnpm test
 
 # 打包
 pnpm run pack
@@ -92,10 +93,16 @@ service 与 route 零改动。
 ### 测试
 
 ```bash
-cd server && pnpm test    # 业务规则 + 传输解析（23 个用例，含内存假仓储）
+pnpm test                 # 前后端一起跑（服务端 23 + 客户端 12）
+cd server && pnpm test    # 仅后端：业务规则 + 传输解析
+cd client && pnpm test    # 仅前端：Markdown 渲染器 + 相邻篇选取
 ```
 
-业务层测试通过 `registerBlogProvider` 注入内存假仓储，无需真实数据源即可验证筛选/排序/清洗等规则。
+两端都**不依赖真实数据源、不需要 jsdom**，可在 CI 与本地离线跑：
+
+- **服务端**（23 个用例）：业务层通过 `registerBlogProvider` 注入内存假仓储，验证筛选 / 排序 / 输入清洗等规则。
+- **客户端**（12 个用例）：`Markdown` 用 `react-dom/server` 渲染后断言输出（如表格单元格里的转义竖线
+  `\|` 不被拆列）；`adjacentOf` 覆盖最新 / 最旧 / 单篇 / 空表 / id 缺失五种边界。
 
 ## 目录结构
 
@@ -105,13 +112,15 @@ cd server && pnpm test    # 业务规则 + 传输解析（23 个用例，含内�
 │       ├── components/   # Nav / Hero / ProjectGallery / Markdown / Skeletons / icon ...
 │       ├── pages/        # HomePage / ArticlesPage / PostPage / ArchivePage / AboutPage
 │       ├── services/     # blog-api.ts（相对路径 ./api/...）
+│       ├── types/        # blog.ts 领域类型
+│       ├── utils/        # cn / post-nav（相邻篇选取，含单测）
 │       └── styles/       # global.css（设计变量与排版体系）
 ├── server/               # Nitro 后端
 │   ├── routes/api/blog/  # posts / projects / comments / view / config
 │   ├── services/         # blog-service.ts 业务规则（含单元测试）
 │   ├── data/             # 数据层：接口 + provider 注册表
 │   │   └── providers/unicloud-db/  # 云数据库实现（collections / client / mappers / admin / repository）
-│   └── proxy-63157.mjs   # 预览代理（63157 → 4917）
+│   └── plugins/          # data-source.ts：启动时把配置注入数据层
 ├── scripts/              # 构建 / 部署 / 迁移 / 自检脚本
 ├── deploy/unicloud/      # 云函数产物 + database/*.schema.json
 └── docs/designs/         # DESIGN.md 设计规范
@@ -126,10 +135,10 @@ cd server && pnpm test    # 业务规则 + 传输解析（23 个用例，含内�
 pnpm run build:unicloud           # 产出 deploy/unicloud/cloudfunctions/mz-corner-api
 pnpm run deploy:unicloud          # 构建 + 同步产物 + 上传集合 Schema + CLI 上传 + 自检
 
-# 首次灌数据（两条路，选一条；详见部署文档「步骤 4」）
-pnpm run migrate:unicloud -- --out /tmp/payload.json   # A: 不需要 SEED_TOKEN —— 生成初始化数据文件
-node scripts/export-init-data.mjs --in /tmp/payload.json   #    再执行 CLI --initdatabase 上传
-pnpm run migrate:unicloud -- --base <URL化地址> --token <SEED_TOKEN>   # B: 幂等，可重跑/清理
+# 首次灌数据（一次性，线上已完成；详见部署文档「步骤 4」）
+# A. 初始化数据文件（不需要 SEED_TOKEN）：转换产物 → init_data.json，再走 CLI --initdatabase
+node scripts/export-init-data.mjs --in <转换产物.json>
+# B. seed 路由（幂等，可重跑/清理）：POST /api/admin/seed，需云函数环境变量 SEED_TOKEN
 
 # 前端（uniCloud 前端网页托管；CLI 可直接传，见部署文档「步骤 6」）
 cd client && rm -rf dist && VITE_API_BASE=<URL化地址> pnpm run build && cd ..
@@ -137,6 +146,10 @@ cd client && rm -rf dist && VITE_API_BASE=<URL化地址> pnpm run build && cd ..
 "<HBuilderX>/cli.exe" hosting deploy --prj mz-corner --provider alipay \
   --space <unicloud-space-id> --source client/dist
 ```
+
+> **备份转换脚本已移除**：`scripts/migrate-from-dbsheet.mjs`（WPS 多维表备份 → 转换产物）
+> 在「清除 WPS 遗留代码」提交里删掉了——它直连 WPS 备份，属一次性工具。仓库保留的是
+> 后半段 `export-init-data.mjs` 与服务端 seed 路由。要重新灌库，需先补回转换步骤。
 
 线上入口：<https://<unicloud-space-id>-static.normal.cloudstatic.cn/>
 （`/` 会 302 到 `/index.html`——该托管的「索引文件」是路径语义，这个尾巴消不掉，已实测接受。

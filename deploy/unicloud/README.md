@@ -189,6 +189,12 @@ pnpm run deploy:unicloud -- --skip-build  # 复用现有产物，只做上传 + 
 
 ## 步骤 4：首次数据迁移（把多维表备份灌进云数据库）
 
+> ⚠️ **本节是历史记录**：转换脚本 `scripts/migrate-from-dbsheet.mjs` 已在
+> `59f778e chore(cleanup): 清除 WPS/App Studio 遗留代码与无关文件` 中移除
+> （它直连 WPS 多维表备份，属一次性工具），下文命令里的 `migrate:unicloud` 现已不存在。
+> 仓库现存的只有后半段 `scripts/export-init-data.mjs`（转换产物 → `init_data.json`）
+> 与服务端 seed 路由 `POST /api/admin/seed`。线上数据已迁移完成，日常无需重跑。
+
 备份目录（**仓库外**，含 4 份 sheet JSON）默认取 `<local-path>/data/work/mz-corner-数据备份`，
 可用 `--from` 指定。两条路灌的是同一份备份，按「要不要 SEED_TOKEN」选：
 
