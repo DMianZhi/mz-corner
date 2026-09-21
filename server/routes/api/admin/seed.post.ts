@@ -1,6 +1,7 @@
-import { createError, defineEventHandler, getHeader } from "h3";
+import { createError, defineEventHandler } from "h3";
 import { clearCollection, COLLECTIONS, countDocuments, insertDocuments } from "~~/data";
 import { readJsonBody } from "~~/utils/body";
+import { requireAdminToken } from "~~/utils/admin-auth";
 import { errorMessage } from "~~/utils/errors";
 
 /**
@@ -10,12 +11,9 @@ import { errorMessage } from "~~/utils/errors";
  * 所以本地把数据转成领域文档，再 POST 上来由云函数落库——
  * **数据本身因此不进 git**（评论含读者邮箱，不能进公开仓库）。
  *
- * 鉴权：请求头 x-seed-token 必须与环境变量 SEED_TOKEN 一致。
- * 未配置 SEED_TOKEN 时该端点返回 404（功能关闭，且不暴露管理端点存在）。
- *
- * 这里刻意直接读 process.env 而非常规的 runtimeConfig 注入：
- * runtimeConfig 的取值会在构建期内联进产物，令牌一旦内联就只能重新构建才能更换；
- * SEED_TOKEN 属于「用完即弃」的运维开关，必须能在控制台随时改/删。
+ * 鉴权：请求头 x-seed-token 必须与环境变量 SEED_TOKEN 一致——
+ * 与 PATCH /api/blog/posts/:id 共用 `requireAdminToken()`（语义与实现细节见该工具）。
+ * 一把令牌管所有写端点：未配置 → 404 关闭，不匹配 → 403。
  *
  * 请求体：
  *   {
@@ -34,13 +32,7 @@ const SEEDABLE = [
 ];
 
 export default defineEventHandler(async (event) => {
-  const token = (process.env.SEED_TOKEN || "").trim();
-  if (!token) {
-    throw createError({ statusCode: 404, statusMessage: "Not Found" });
-  }
-  if ((getHeader(event, "x-seed-token") || "").trim() !== token) {
-    throw createError({ statusCode: 403, statusMessage: "invalid seed token" });
-  }
+  requireAdminToken(event);
 
   const body = await readJsonBody<Record<string, unknown>>(event);
   if (!body || typeof body !== "object") {
