@@ -32,8 +32,10 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
     } else if (m[3] !== undefined) {
       nodes.push(<em key={k}>{m[3]}</em>);
     } else if (m[4] !== undefined) {
+      // 链接色必须用 --brand（品牌绿）：--accent 是中性面底色（暗色下 #1E1E24 近黑），
+      // 当文字色用会让链接在暗色主题下几乎隐形。
       nodes.push(
-        <a key={k} href={m[5]} target="_blank" rel="noreferrer noopener" className="link-underline" style={{ color: 'var(--accent, #C8F542)' }}>
+        <a key={k} href={m[5]} target="_blank" rel="noreferrer noopener" className="link-underline" style={{ color: 'var(--brand, #C8F542)' }}>
           {m[4]}
         </a>
       );
@@ -202,7 +204,7 @@ export function Markdown({ source }: { source: string }) {
         i++;
       }
       push(
-        <blockquote style={{ margin: '20px 0', padding: '12px 18px', borderLeft: '3px solid var(--accent, #C8F542)', background: 'var(--bg-soft, rgba(255,255,255,0.03))', color: 'var(--text-2, inherit)', borderRadius: '0 6px 6px 0' }}>
+        <blockquote style={{ margin: '20px 0', padding: '12px 18px', borderLeft: '3px solid var(--brand, #C8F542)', background: 'var(--bg-soft, rgba(255,255,255,0.03))', color: 'var(--text-2, inherit)', borderRadius: '0 6px 6px 0' }}>
           {buf.map((l, n) => <p key={n} style={{ margin: '4px 0' }}>{renderInline(l, `q${key}-${n}`)}</p>)}
         </blockquote>
       );
