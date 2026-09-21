@@ -3,9 +3,9 @@ import { useParams } from 'react-router-dom';
 import { MiniFooter } from '@/components/Footer';
 import { Markdown } from '@/components/Markdown';
 import { PostSkeleton } from '@/components/Skeletons';
-import { ArrowLeftIcon } from '@/components/icon';
-import { getArticle, getComments, addComment, incrementViewCount } from '@/services/blog-api';
-import type { Article, Comment } from '@/types/blog';
+import { ArrowLeftIcon, ArrowRightIcon } from '@/components/icon';
+import { getArticle, getArticles, getComments, addComment, incrementViewCount } from '@/services/blog-api';
+import type { Article, ArticleListItem, Comment } from '@/types/blog';
 
 function ReadingProgress() {
   const [p, setP] = useState(0);
@@ -30,6 +30,96 @@ function ReadingProgress() {
   );
 }
 
+/** 单侧导航卡：左卡箭头在前、右卡箭头在后，标签与文字各自对齐外侧 */
+function NavCard({ dir, a }: { dir: 'prev' | 'next'; a: ArticleListItem }) {
+  const isPrev = dir === 'prev';
+  const date = a.publishDate ? a.publishDate.slice(0, 10).replace(/\//g, '-') : '';
+  return (
+    <a
+      href={`#/post/${a.id}`}
+      className="flex flex-col gap-2 no-underline"
+      style={{
+        padding: '18px 20px',
+        borderRadius: 16,
+        border: '1px solid var(--border-soft)',
+        background: 'var(--bg-card)',
+        textAlign: isPrev ? 'left' : 'right',
+        transition: 'border-color 250ms cubic-bezier(0.16,1,0.3,1), background 250ms cubic-bezier(0.16,1,0.3,1)',
+      }}
+      onMouseEnter={(e) => {
+        const el = e.currentTarget as HTMLElement;
+        el.style.borderColor = 'var(--brand)';
+        el.style.background = 'var(--bg-hover)';
+      }}
+      onMouseLeave={(e) => {
+        const el = e.currentTarget as HTMLElement;
+        el.style.borderColor = 'var(--border-soft)';
+        el.style.background = 'var(--bg-card)';
+      }}
+    >
+      <span
+        className="font-mono-site"
+        style={{
+          fontSize: 12, color: 'var(--text-3)',
+          display: 'flex', alignItems: 'center', gap: 6,
+          justifyContent: isPrev ? 'flex-start' : 'flex-end',
+        }}
+      >
+        {isPrev && <ArrowLeftIcon size={13} />}
+        {isPrev ? '上一篇' : '下一篇'}
+        {!isPrev && <ArrowRightIcon size={13} />}
+      </span>
+      {/* 标题最多两行：相邻篇标题长度差异大，不夹住会把卡片撑得高低不齐 */}
+      <span
+        style={{
+          fontSize: 16, fontWeight: 600, color: 'var(--text-1)', lineHeight: 1.45,
+          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+        }}
+      >
+        {a.title}
+      </span>
+      <span className="font-mono-site" style={{ fontSize: 12, color: 'var(--text-3)' }}>
+        {date}{a.category ? ` · ${a.category}` : ''}
+      </span>
+    </a>
+  );
+}
+
+/**
+ * 上一篇 / 下一篇
+ *
+ * 顺序与 /articles 列表完全一致（publishDate 倒序）：
+ * 「上一篇」= 列表中靠上的一条（更新），「下一篇」= 靠下的一条（更早）。
+ * 卡片上带日期，方向对读者自明。
+ */
+function PostNav({ id }: { id: string }) {
+  const [list, setList] = useState<ArticleListItem[]>([]);
+
+  useEffect(() => {
+    // 与 /articles 同源同序，不额外加接口。后端当前返回全部已发布文章（草稿在仓库层已滤掉，
+    // 也不受 pageSize 影响），给足 pageSize 只是防御：将来后端真做分页也不会漏掉相邻篇。
+    getArticles({ page: 1, pageSize: 200 }).then((d) => setList(d.items));
+  }, []);
+
+  // 列表只拉一次，翻篇时靠 id 重新定位，相邻篇是瞬时出现的（不再发请求）
+  const i = list.findIndex((a) => a.id === id);
+  const prev = i > 0 ? list[i - 1] : null;
+  const next = i >= 0 && i < list.length - 1 ? list[i + 1] : null;
+
+  if (!prev && !next) return null;
+
+  return (
+    <nav
+      data-post-nav=""
+      className="mt-16 grid gap-4 sm:grid-cols-2"
+      style={{ borderTop: '1px solid var(--border-soft)', paddingTop: 32 }}
+    >
+      {prev ? <NavCard dir="prev" a={prev} /> : <span className="hidden sm:block" />}
+      {next ? <NavCard dir="next" a={next} /> : <span className="hidden sm:block" />}
+    </nav>
+  );
+}
+
 export default function PostPage() {
   const { id } = useParams<{ id: string }>();
   const [article, setArticle] = useState<Article | null>(null);
@@ -40,6 +130,8 @@ export default function PostPage() {
 
   useEffect(() => {
     if (!id) return;
+    // 翻篇时先回到骨架态：否则会先看到「旧文章 + 新滚动位置」再跳变
+    setLoading(true);
     Promise.all([getArticle(id), getComments(id)]).then(([a, c]) => {
       setArticle(a);
       setComments(c);
@@ -116,6 +208,9 @@ export default function PostPage() {
         <div className="mt-12" style={{ fontSize: 16, lineHeight: 1.8, color: 'var(--text-1)' }}>
           <Markdown source={article.content} />
         </div>
+
+        {/* 上一篇 / 下一篇：正文读完、评论区之前，连续阅读的主入口 */}
+        <PostNav id={article.id} />
 
         {/* 评论区 */}
         <section className="mt-24">
