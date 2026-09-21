@@ -1,0 +1,84 @@
+/* manifest.json 模板 —— 复制为 manifest.json 并填入自己的 appid。
+ *
+ * 为什么需要这个文件：HBuilderX 的 CLI 上传云函数时会读<项目根>/manifest.json 的
+ * `appid` 字段，缺了会直接报「缺少appid，请在manifest.json中设置appid」。
+ * 本项目不是 uni-app 应用，这个文件只作为 uniCloud 部署宿主存在。
+ *
+ * 用法：
+ *   cp manifest.example.json manifest.json
+ *   # 然后把 appid 填成自己的：HBuilderX → 任意 uni-app 项目 → manifest.json 的 appid，
+ *   # 或在 DCloud 开发者中心申请（形如 __UNI__XXXXXXX）
+ *
+ * 真实的 manifest.json 已 gitignore（appid 与账号相关，不入库），本模板只保留占位。
+ * 下面的 app-plus / mp-* 段落是 HBuilderX 生成 uni-app 项目时的标准结构，本项目用不到，
+ * 但保持原样可确保 HBuilderX 正确识别为 uni-app 项目 —— 建议原样保留。
+ */
+{
+    "name" : "mz-corner-deploy",
+    "appid" : "",
+    "description" : "uniCloud 部署宿主（仅供 HBuilderX CLI 上传云函数使用）",
+    "versionName" : "1.0.0",
+    "versionCode" : "100",
+    "transformPx" : false,
+    /* 5+App特有相关 */
+    "app-plus" : {
+        "usingComponents" : true,
+        "nvueStyleCompiler" : "uni-app",
+        "compilerVersion" : 3,
+        "splashscreen" : {
+            "alwaysShowBeforeRender" : true,
+            "waiting" : true,
+            "autoclose" : true,
+            "delay" : 0
+        },
+        /* 模块配置 */
+        "modules" : {},
+        /* 应用发布信息 */
+        "distribute" : {
+            /* android打包配置 */
+            "android" : {
+                "permissions" : [
+                    "<uses-permission android:name=\"android.permission.CHANGE_NETWORK_STATE\"/>",
+                    "<uses-permission android:name=\"android.permission.MOUNT_UNMOUNT_FILESYSTEMS\"/>",
+                    "<uses-permission android:name=\"android.permission.VIBRATE\"/>",
+                    "<uses-permission android:name=\"android.permission.READ_LOGS\"/>",
+                    "<uses-permission android:name=\"android.permission.ACCESS_WIFI_STATE\"/>",
+                    "<uses-feature android:name=\"android.hardware.camera.autofocus\"/>",
+                    "<uses-permission android:name=\"android.permission.ACCESS_NETWORK_STATE\"/>",
+                    "<uses-permission android:name=\"android.permission.CAMERA\"/>",
+                    "<uses-permission android:name=\"android.permission.GET_ACCOUNTS\"/>",
+                    "<uses-permission android:name=\"android.permission.READ_PHONE_STATE\"/>",
+                    "<uses-permission android:name=\"android.permission.CHANGE_WIFI_STATE\"/>",
+                    "<uses-permission android:name=\"android.permission.WAKE_LOCK\"/>",
+                    "<uses-permission android:name=\"android.permission.FLASHLIGHT\"/>",
+                    "<uses-feature android:name=\"android.hardware.camera\"/>",
+                    "<uses-permission android:name=\"android.permission.WRITE_SETTINGS\"/>"
+                ]
+            },
+            /* ios打包配置 */
+            "ios" : {},
+            /* SDK配置 */
+            "sdkConfigs" : {}
+        }
+    },
+    /* 快应用特有相关 */
+    "quickapp" : {},
+    /* 小程序特有相关 */
+    "mp-weixin" : {
+        "appid" : "",
+        "setting" : {
+            "urlCheck" : false
+        },
+        "usingComponents" : true
+    },
+    "mp-alipay" : {
+        "usingComponents" : true
+    },
+    "mp-baidu" : {
+        "usingComponents" : true
+    },
+    "mp-toutiao" : {
+        "usingComponents" : true
+    },
+    "vueVersion" : "3"
+}

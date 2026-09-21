@@ -7,6 +7,9 @@
  *   node scripts/verify-unicloud-deploy.mjs https://<spaceId>.dev-hz.cloudbasefunction.cn/mz-api
  *   node scripts/verify-unicloud-deploy.mjs <baseUrl> https://<前端网页托管域名>
  *
+ * 地址来源优先级：命令行参数 > 环境变量（UNICLOUD_URL_BASE / UNICLOUD_STATIC_HOST）> 报错退出。
+ * 环境变量从仓库根 .env 读取（cp .env.example .env 后填值），也可直接 pnpm run verify:unicloud。
+ *
  * 注意域名：支付宝云 URL 化域名是 dev-hz.cloudbasefunction.cn，
  * api-hz.cloudbasefunction.cn 是云函数调用（uni.request/callFunction）域名，
  * 两者不通用——打到 api-hz 会得到网关 50002。
@@ -18,11 +21,20 @@
  * OPTIONS 的探测结果只作为已知现象的提示，不计入失败。
  */
 
-const DEFAULT_BASE = "https://<unicloud-space-id>.dev-hz.cloudbasefunction.cn/mz-api";
-
 const positional = process.argv.slice(2).filter((arg) => !arg.startsWith("-"));
-const baseUrl = (positional[0] || process.env.DEPLOY_BASE_URL || DEFAULT_BASE).replace(/\/+$/, "");
-const origin = positional[1] || "";
+const rawBase = positional[0] || process.env.UNICLOUD_URL_BASE;
+if (!rawBase) {
+  console.error(
+    [
+      "缺少接口地址，任选其一：",
+      "  1. 命令行参数：node scripts/verify-unicloud-deploy.mjs https://<spaceId>.dev-hz.cloudbasefunction.cn/mz-api",
+      "  2. 环境变量：cp .env.example .env 并填 UNICLOUD_URL_BASE，再跑 pnpm run verify:unicloud",
+    ].join("\n"),
+  );
+  process.exit(1);
+}
+const baseUrl = rawBase.replace(/\/+$/, "");
+const origin = positional[1] || process.env.UNICLOUD_STATIC_HOST || "";
 const TIMEOUT_MS = 20000;
 
 const results = [];

@@ -24,8 +24,9 @@
 
 ## 环境变量
 - Vite 通过 `import.meta.env` 暴露 `VITE_*` 前缀的环境变量。
-- 静态托管与云函数分离部署时，构建前必须给 `VITE_API_BASE` 赋值为云函数 URL，
-  否则前端会回落到同源 `./api/...`，页面能开但取不到数据。
+- 静态托管与云函数分离部署时，`VITE_API_BASE` 必须指向云函数 URL，否则前端会回落到同源
+  `./api/...`，页面能开但取不到数据。该值写在 `client/.env`（模板 `client/.env.example`），
+  **禁止硬编码进源码或文档**。
 
 ## 服务端接口调用
 - 使用裸 `fetch('./api/...')` 调用服务端路由，不需要 `credentials: "include"`。

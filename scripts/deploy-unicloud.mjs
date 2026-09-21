@@ -42,7 +42,7 @@ const URL_SUFFIX = {
 };
 
 const args = parseArgs(process.argv.slice(2));
-const provider = args.provider || "alipay";
+const provider = args.provider || process.env.UNICLOUD_PROVIDER || "alipay";
 const projectName = args.prj || "mz-corner";
 const functionName = args.name || "mz-corner-api";
 

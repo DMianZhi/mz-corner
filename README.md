@@ -131,6 +131,11 @@ cd client && pnpm test    # 仅前端：Markdown 渲染器 + 相邻篇选取
 完整步骤（含数据导入）见 [`deploy/unicloud/README.md`](deploy/unicloud/README.md)。
 
 ```bash
+# 0. 配置（三个模板各复制一份，填自己的值；都是 gitignore 的本地文件）
+cp .env.example .env                      # UNICLOUD_SPACE_ID / UNICLOUD_URL_BASE / UNICLOUD_STATIC_HOST
+cp client/.env.example client/.env        # VITE_API_BASE（前端接口地址）
+cp manifest.example.json manifest.json    # appid（HBuilderX CLI 上传需要）
+
 pnpm run build:unicloud           # 产出 deploy/unicloud/cloudfunctions/mz-corner-api
 pnpm run deploy:unicloud          # 构建 + 同步产物 + 上传集合 Schema + CLI 上传 + 自检
 
@@ -139,13 +144,13 @@ node scripts/export-init-data.mjs --in payload.json   # A: 领域文档 → init
 # B: POST /api/admin/seed（幂等可重跑，需云函数环境变量 SEED_TOKEN）
 
 # 前端（uniCloud 前端网页托管；CLI 可直接传，见部署文档「步骤 6」）
-cd client && rm -rf dist && VITE_API_BASE=<URL化地址> pnpm run build && cd ..
+pnpm run build                    # 接口地址取自 client/.env 的 VITE_API_BASE
 # 省略 --prefix 即传到云空间根目录（写 --prefix / 会被路径规范化搞坏）
 "<HBuilderX>/cli.exe" hosting deploy --prj mz-corner --provider alipay \
-  --space <unicloud-space-id> --source client/dist
+  --space <你的spaceId> --source client/dist
 ```
 
-线上入口：<https://<unicloud-space-id>-static.normal.cloudstatic.cn/>
+线上入口：`https://<spaceId>-static.normal.cloudstatic.cn/`（自己的地址见 `.env` 的 `UNICLOUD_STATIC_HOST`）
 （`/` 会 302 到 `/index.html`——该托管的「索引文件」是路径语义，这个尾巴消不掉，已实测接受。
 控制台静态站点「索引文件」须为 `index.html`，填带目录的路径会把 `/FlappyBird/`、`/password_tools/`
 一起拼坏。详见部署文档「步骤 6」）

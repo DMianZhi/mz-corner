@@ -6,6 +6,15 @@
 - 后端构建为云函数产物（`deploy/unicloud/cloudfunctions/mz-corner-api`），部署到 uniCloud 云函数。
 - 数据存在同服务空间的云数据库，只能由云函数访问。
 
+## 配置
+- **敏感信息一律走环境变量，禁止硬编码**：服务空间 ID、接口地址（URL 化域名）、静态托管域名、令牌。
+- 本地配置（三个模板各复制一份，均 gitignore）：
+  ```bash
+  cp .env.example .env                      # 脚本用 node --env-file-if-exists=.env 读取
+  cp client/.env.example client/.env        # Vite 自动加载 client/.env
+  cp manifest.example.json manifest.json    # appid（HBuilderX CLI 上传需要）
+  ```
+
 ## 开发流程
 
 ```

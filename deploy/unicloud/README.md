@@ -116,13 +116,13 @@ pnpm run deploy:unicloud -- --skip-build  # 复用现有产物，只做上传 + 
 （实测 `share/index.js` 的 `getAppid()` 只读 `<项目根>/manifest.json` 的 `appid` 字段，
 上传请求 `/serverless/function/...` 的 body 里也带 `appid`），
 而 `appid` **只能由 DCloud 云端分配**（官方文档：新建 uni-app 项目时云端分配）。
-本仓库是 Vite 工程，没有这个文件，所以关联过不去。
+本仓库是 Vite 工程，没有这个文件，所以关联过不去——仓库给了脱敏模板 `manifest.example.json`。
 
 两条路，推荐第二条：
 
 | 方案 | 做法 | 代价 |
 |---|---|---|
-| **A. 给项目根补 manifest.json（实测可用）** | 从任意 uni-app 项目拷一个 `manifest.json`（带 `appid`）到项目根，再点关联 | 项目会被 HBuilderX 当成 uni-app 项目；`appid` 是账号相关文件，建议 gitignore |
+| **A. 给项目根补 manifest.json（实测可用，仓库已给模板）** | `cp manifest.example.json manifest.json`，把 `appid` 填成自己的（从任意 uni-app 项目拷，或在 DCloud 开发者中心申请），再点关联 | 项目会被 HBuilderX 当成 uni-app 项目；`appid` 是账号相关文件，真实 `manifest.json` 已 gitignore，模板入库 |
 | B. 用一个 uni-app 项目做部署宿主 | HBuilderX 新建 uni-app 项目 + 勾选启用 uniCloud + 服务商支付宝云 + 关联已有服务空间；再把 `mz-corner-api` 拷进它的 `uniCloud-alipay/cloudfunctions/` | 部署宿主不在仓库内（云函数本体仍由本仓库脚本生成） |
 
 方案 A 实测路径：拷入 `manifest.json` → 右键云函数 → **上传所有云函数、公共模块及Actions**
@@ -198,7 +198,7 @@ pnpm run deploy:unicloud -- --skip-build  # 复用现有产物，只做上传 + 
 node scripts/export-init-data.mjs --in payload.json
 
 # 2. 上传（会一并上传 schema 与初始数据）
-"<local-path>/HBuilderX/cli.exe" cloud functions --initdatabase --prj mz-corner --provider alipay
+"<HBuilderX>/cli.exe" cloud functions --initdatabase --prj mz-corner --provider alipay
 
 # 3. 验证
 node scripts/verify-unicloud-deploy.mjs
@@ -231,7 +231,7 @@ node scripts/verify-unicloud-deploy.mjs
 > 云函数上传成功（控制台日志「上传完成」）后，网关仍报 `50002 函数请求不合法 / 函数路由未配置`。
 > 官方文档也明确：「在 uniCloud Web 控制台进行 URL 化配置」。
 
-1. 登录 [uniCloud 后台](https://unicloud.dcloud.net.cn/)，选择服务空间 `<unicloud-space-id>`
+1. 登录 [uniCloud 后台](https://unicloud.dcloud.net.cn/)，选择自己的服务空间（即 `.env` 里的 `UNICLOUD_SPACE_ID`）
 2. 左侧菜单【云函数】
 3. 找到 `mz-corner-api` → 点【详情】→ 配置访问路径 = `/mz-api` → 保存
 4. 若仍报 `50002` 并提示「HTTP访问服务开关」：到 **环境管理 → 访问服务** 打开 **HTTP 访问服务**
@@ -244,10 +244,11 @@ node scripts/verify-unicloud-deploy.mjs
 | 阿里云 | `https://{spaceId}.bspapp.com/{path}` |
 | 腾讯云 | `https://{spaceId}.service.tcloudbase.com/{path}` |
 
-本项目实际使用（支付宝云，spaceId `<unicloud-space-id>`）：
+把 `{spaceId}` 换成自己的服务空间 ID（控制台「服务空间 → 空间详情」，也写在 `.env` 的 `UNICLOUD_SPACE_ID`），
+`{path}` 换成上面配的 URL 化路径（本项目是 `mz-api`）。以支付宝云为例：
 
 ```
-https://<unicloud-space-id>.dev-hz.cloudbasefunction.cn/mz-api
+https://<spaceId>.dev-hz.cloudbasefunction.cn/mz-api
 ```
 
 > ⚠️ **别把 `dev-hz` 和 `api-hz` 搞混**（实测踩过）：
@@ -269,7 +270,7 @@ https://<unicloud-space-id>.dev-hz.cloudbasefunction.cn/mz-api
 ```bash
 cd client
 rm -rf dist   # 必做：否则上次构建的旧 hash 文件会被一起传上去，越传越多
-VITE_API_BASE=https://<unicloud-space-id>.dev-hz.cloudbasefunction.cn/mz-api pnpm run build
+pnpm run build   # 接口地址取自 client/.env 的 VITE_API_BASE（模板 client/.env.example）
 cd ..
 ```
 
@@ -277,8 +278,8 @@ cd ..
 
 ```bash
 # 注意：省略 --prefix 才是「传到云空间根目录」（CLI 文档口径：不填则目标为根目录）
-"<local-path>/HBuilderX/cli.exe" hosting deploy --prj mz-corner --provider alipay \
-  --space <unicloud-space-id> --source client/dist
+"<HBuilderX>/cli.exe" hosting deploy --prj mz-corner --provider alipay \
+  --space <你的spaceId> --source client/dist
 ```
 
 其他方式（等效）：控制台 <https://unicloud.dcloud.net.cn> → 前端网页托管 → **上传文件 / 上传文件夹**；
@@ -290,7 +291,7 @@ cd ..
 
 > **坑：不要写 `--prefix /`**。实测在 Windows 上它会把文件写到被路径规范化搞坏的位置——云端凭空
 > 多出一个名为 `..\..\..\..` 的文件夹**和一个 `C:` 目录树**（MSYS 把 `/` 转成 `C:\…` 后，
-> 本地路径在空间里被复刻成 `<local-path>/AppData/…/mz-corner/…`），而
+> 本地路径被整条复刻到了空间里），而
 > `hosting list --prefix /assets/` 又碰巧能看到文件，造成「列表里有、HTTP 取不到」的假象
 > （`/assets/…` 一律 404）。省略 `--prefix` 即根目录，实测 15 个文件全部生效。
 > 这两处残留（`..\..\..\..`、`C:`）都只能在控制台删。
@@ -298,9 +299,9 @@ cd ..
 **线上地址**：
 
 ```
-https://<unicloud-space-id>-static.normal.cloudstatic.cn/                        → 302 → /index.html（博客）
-https://<unicloud-space-id>-static.normal.cloudstatic.cn/FlappyBird/index.html
-https://<unicloud-space-id>-static.normal.cloudstatic.cn/password_tools/index.html
+https://<spaceId>-static.normal.cloudstatic.cn/                        → 302 → /index.html（博客）
+https://<spaceId>-static.normal.cloudstatic.cn/FlappyBird/index.html
+https://<spaceId>-static.normal.cloudstatic.cn/password_tools/index.html
 ```
 
 项目使用 `HashRouter`，所有路由都在 `#/` 之后，因此不需要配置 SPA fallback。
@@ -365,9 +366,13 @@ OPTIONS 的探测结果只作为已知现象提示，不计入失败。
 仓库自带只读自检脚本（不写数据）：
 
 ```bash
-node scripts/verify-unicloud-deploy.mjs \
-  https://<unicloud-space-id>.dev-hz.cloudbasefunction.cn/mz-api \
-  https://<前端网页托管域名>
+# 方式一（推荐）：地址写在 .env 里（UNICLOUD_URL_BASE / UNICLOUD_STATIC_HOST），直接跑
+pnpm run verify:unicloud
+
+# 方式二：命令行传地址，优先级高于 .env
+pnpm run verify:unicloud -- \
+  https://<spaceId>.dev-hz.cloudbasefunction.cn/mz-api \
+  https://<spaceId>-static.normal.cloudstatic.cn
 ```
 
 它会依次探测 `health` / `config` / `posts` / CORS 预检，并把失败原因翻译成处置建议（如集合未创建、

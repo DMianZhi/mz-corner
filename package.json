@@ -18,10 +18,10 @@
     "test:server": "pnpm --filter @mz-corner/server test",
     "build:unicloud": "node scripts/build-unicloud.mjs",
     "prepare:unicloud": "node scripts/prepare-unicloud-project.mjs",
-    "deploy:unicloud": "node scripts/deploy-unicloud.mjs",
+    "deploy:unicloud": "node --env-file-if-exists=.env scripts/deploy-unicloud.mjs",
     "harness:unicloud": "node scripts/local-unicloud-harness.mjs",
     "export:init-data": "node scripts/export-init-data.mjs",
-    "verify:unicloud": "node scripts/verify-unicloud-deploy.mjs"
+    "verify:unicloud": "node --env-file-if-exists=.env scripts/verify-unicloud-deploy.mjs"
   },
   "devDependencies": {
     "archiver": "^7.0.1",
