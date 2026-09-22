@@ -4,6 +4,10 @@ import { clearSessionCookie } from "~~/utils/session-cookie";
 /**
  * POST /api/admin/logout —— 注销：清会话 Cookie。
  *
+ * 返回 200 + JSON（而非 204）：uniCloud 运行时对 204 + body 的集成响应
+ * 会抛「Response constructor: Invalid response status code 204」（本地
+ * harness 直调 handler 无此问题，云端必现）。
+ *
  * 无状态 JWT 的固有限制：服务端无法让一个未过期的令牌「作废」（令牌在自己
  * 有效期内仍可被持有者使用——前提是能把令牌塞进请求；浏览器端 Cookie 已随
  * 本响应清除，HttpOnly 又让 XSS 读不到，实际风险面可忽略）。
@@ -11,6 +15,5 @@ import { clearSessionCookie } from "~~/utils/session-cookie";
  */
 export default defineEventHandler((event: H3Event) => {
   clearSessionCookie(event);
-  setResponseStatus(event, 204);
-  return null;
+  return { ok: true };
 });

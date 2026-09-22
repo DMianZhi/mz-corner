@@ -6,7 +6,7 @@
 //
 // 端点清单（对应 server/routes/api/admin/*）：
 // - POST /api/admin/login    { password } → { ok, expiresInSec }
-// - POST /api/admin/logout   → 204
+// - POST /api/admin/logout   → 200 { ok: true }（204 在 uniCloud 运行时会炸）
 // - GET  /api/admin/session  → { authenticated, expiresAt? }
 // - GET  /api/admin/data-export → { articles, comments, projects, site_config }
 // - PATCH /api/blog/posts/:id { content }（走 blog 前缀，守卫同源）
