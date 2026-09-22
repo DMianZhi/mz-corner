@@ -17,11 +17,22 @@ export { SESSION_COOKIE_NAME };
  * verify 用到 nowSec 默认时钟；harness 测试可注入室温时钟（见各路由）。
  */
 
-/** maxAge 超过浏览器上限（400 天）会被 Chrome 拒绝 —— 7 天远小于上限，直接用 */
+/**
+ * maxAge 超过浏览器上限（400 天）会被 Chrome 拒绝 —— 7 天远小于上限，直接用。
+ *
+ * sameSite 取值说明（跨域部署后必须 None）：
+ * - SPA 与 API 同源（云函数域名下）：Strict 最严，免疫 CSRF。
+ * - SPA 在静态托管域名、API 在云函数域名（跨站）：Strict/None 之外的值都会导致
+ *   浏览器在跨站请求中**不携带 Cookie**（登录 200 但会话探测永远 false）。
+ *   必须 SameSite=None + Secure（Chrome 强制 None 必须配 Secure，云函数是 HTTPS 满足）。
+ * - CSRF 防护不依赖 SameSite，改由「仅接受 JSON POST + 无表单可自动携带的凭据」承担：
+ *   Cookie 虽会被跨站请求携带，但攻击页无法读取响应（CORS），也无法构造出
+ *   能通过服务端解析的 JSON body（form 提交只能发 urlencoded/multipart）。
+ */
 export function setSessionCookie(event: H3Event, token: string): void {
   setCookie(event, SESSION_COOKIE_NAME, token, {
     httpOnly: true,
-    sameSite: "strict",
+    sameSite: "none",
     secure: true,
     path: "/",
     maxAge: SESSION_TTL_SEC,

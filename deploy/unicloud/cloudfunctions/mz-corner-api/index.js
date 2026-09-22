@@ -39,16 +39,28 @@ function loadHandler() {
   return handlerPromise;
 }
 
-/** 允许的来源：默认 *（公开只读博客），可用环境变量收敛到具体域名。 */
-function corsHeaders() {
-  const origin = process.env.CORS_ORIGIN || '*';
-  return {
-    'access-control-allow-origin': origin,
+/**
+ * 允许的来源：默认回显请求 Origin（配合 credentials 场景；公开只读博客不受影响），
+ * 可用环境变量 CORS_ORIGIN 收敛到固定域名。
+ *
+ * 为什么默认回显而不是 `*`：管理后台的会话 Cookie 需要 credentials: 'include'，
+ * 而 CORS 规范禁止 `ACAO: *` 与 credentials 同用（浏览器直接拒收响应）。
+ * 回显 Origin 等效于「允许任意源跨域读」，但满足 credentials 的语法要求；
+ * 需要收敛时配 CORS_ORIGIN 即可（仅匹配该源才回显，其余源无 ACAO 头）。
+ */
+function corsHeaders(event) {
+  const configured = process.env.CORS_ORIGIN;
+  const rawOrigin = event && event.headers ? (event.headers.Origin || event.headers.origin) : undefined;
+  const origin = String(rawOrigin || '');
+  const allow = configured ? (origin === configured ? origin : '') : (origin || '*');
+  const headers = {
     'access-control-allow-methods': CORS_METHODS,
     'access-control-allow-headers': CORS_HEADERS,
     'access-control-max-age': '86400',
     vary: 'Origin',
   };
+  if (allow) headers['access-control-allow-origin'] = allow;
+  return headers;
 }
 
 /**
@@ -97,9 +109,54 @@ function composedResponse({ statusCode = 200, headers = {}, body = '', isBase64E
   };
 }
 
+/**
+ * 预压缩响应体（修复网关 gzip 截断 bug）。
+ *
+ * 实测（2026-09-22）：支付宝云 URL 化网关对大响应（如 366KB 的 SPA 主 JS）会
+ * 自行 gzip，但 **Content-Length 仍是未压缩大小**（366721 vs 实际 ~117KB），
+ * 客户端等不满声明字节即断流：curl exit 18（transfer closed with outstanding
+ * data）、Chrome 报 net::ERR_HTTP2_PROTOCOL_ERROR，SPA module script 加载失败
+ * → 整站白屏。Chrome 默认带 Accept-Encoding: gzip，必中。
+ *
+ * 解法：适配层自己 gzip 并声明正确的 Content-Length。网关见 Content-Encoding
+ * 已设就不再二次压缩，字节流自洽。仅对可压缩类型且 >1KB 的响应生效；
+ * 客户端不支持 gzip 时原样返回。
+ */
+const COMPRESSIBLE = /text\/|application\/(javascript|json|xml|font|manifest)/;
+const MIN_COMPRESS_BYTES = 1024;
+
+function gzipResponse(result, headers, acceptEncoding) {
+  // 已经是压缩体（Nitro 产物或上游已处理）或客户端不支持 gzip：不动
+  if (headers['content-encoding']) return { headers, body: result.body, isBase64Encoded: result.isBase64Encoded };
+  if (!/gzip|\*/i.test(String(acceptEncoding || ''))) return { headers, body: result.body, isBase64Encoded: result.isBase64Encoded };
+
+  const contentType = String(headers['content-type'] || '');
+  if (!COMPRESSIBLE.test(contentType)) return { headers, body: result.body, isBase64Encoded: result.isBase64Encoded };
+
+  // body 可能是 base64（二进制资源）。统一解出原始字节再压缩。
+  const raw = result.isBase64Encoded
+    ? Buffer.from(String(result.body || ''), 'base64')
+    : Buffer.from(String(result.body || ''), 'utf8');
+  if (raw.length < MIN_COMPRESS_BYTES) return { headers, body: result.body, isBase64Encoded: result.isBase64Encoded };
+
+  const gzipped = require('node:zlib').gzipSync(raw);
+  // 压缩无收益（已压缩内容的再压缩反而变大）：放弃
+  if (gzipped.length >= raw.length) return { headers, body: result.body, isBase64Encoded: result.isBase64Encoded };
+
+  // 注意：不设 content-length。实测（2026-09-22）网关对「集成响应 + base64 + gzip +
+  // content-length」的组合会直接断流（curl exit 18、零字节）；去掉 content-length
+  // 后由网关自行分块传输，字节流完整。
+  const { 'content-length': _drop, ...rest } = headers;
+  return {
+    headers: { ...rest, 'content-encoding': 'gzip' },
+    body: gzipped.toString('base64'),
+    isBase64Encoded: true,
+  };
+}
+
 exports.main = async (event, context) => {
   const method = (event && event.httpMethod ? event.httpMethod : 'GET').toUpperCase();
-  const cors = corsHeaders();
+  const cors = corsHeaders(event);
 
   // 浏览器预检：直接短路，不进入业务逻辑。
   //
@@ -124,11 +181,17 @@ exports.main = async (event, context) => {
         mergedHeaders[key] = values.length === 1 ? values[0] : values.join(', ');
       }
     }
+    // 预压缩（修复网关 gzip 截断 bug，见 gzipResponse 注释）。
+    // accept-encoding 在 toNitroEvent 里已小写化，这里从原始 event 取。
+    const rawAccept = (event.headers || {})[
+      Object.keys(event.headers || {}).find((k) => k.toLowerCase() === 'accept-encoding') || ''
+    ];
+    const gz = gzipResponse(result, mergedHeaders, rawAccept);
     return composedResponse({
       statusCode: result.statusCode || 200,
-      headers: mergedHeaders,
-      body: result.body || '',
-      isBase64Encoded: result.isBase64Encoded,
+      headers: gz.headers,
+      body: gz.body,
+      isBase64Encoded: gz.isBase64Encoded,
     });
   } catch (error) {
     console.error('[mz-corner-api] 处理失败:', error && error.stack ? error.stack : error);

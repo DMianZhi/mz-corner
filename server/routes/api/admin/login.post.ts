@@ -58,5 +58,8 @@ export default defineEventHandler(async (event: H3Event) => {
   const token = signSession("admin", secret);
   setSessionCookie(event, token);
   setResponseStatus(event, 200);
-  return { ok: true, expiresInSec: SESSION_TTL_SEC };
+  // token 同时随响应体返回：跨域部署下浏览器拦截第三方 Cookie（Chrome 逐步淘汰 3P cookie），
+  // 前端改用 x-admin-session 头携带会话（守卫三通道的第一通道，优先级高于 Cookie）。
+  // Cookie 保留：同源部署（云函数域名下）仍可无感使用。
+  return { ok: true, token, expiresInSec: SESSION_TTL_SEC };
 });

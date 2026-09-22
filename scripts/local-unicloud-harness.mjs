@@ -87,7 +87,8 @@ const server = http.createServer(async (req, res) => {
 
   const result = await cloudFunction.main(event, EMPTY);
   res.writeHead(result.statusCode, result.headers);
-  res.end(result.body);
+  // 云网关会解 base64 再发给客户端，harness 同样处理，否则二进制响应全变空/乱码
+  res.end(result.isBase64Encoded ? Buffer.from(String(result.body || ''), 'base64') : result.body);
 });
 
 // 端口占用是最容易踩的坑（上一次的模拟器进程不会自己退出），给一条能直接照做的提示

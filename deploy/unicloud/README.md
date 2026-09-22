@@ -306,6 +306,26 @@ https://<spaceId>-static.normal.cloudstatic.cn/password_tools/index.html
 
 项目使用 `HashRouter`，所有路由都在 `#/` 之后，因此不需要配置 SPA fallback。
 
+### 管理后台（/admin）的入口与云函数网关 gzip bug
+
+**入口：主站静态托管域名**（`https://<spaceId>-static.normal.cloudstatic.cn/index.html#/admin`）。
+
+云函数虽然也伺服同一份 SPA（`serveStatic` + catch-all fallback），但**支付宝云 URL 化网关
+有一个 gzip 截断 bug**（实测 2026-09-22），导致云函数域名下的页面白屏，只能作备用：
+
+- 现象：浏览器（默认 `Accept-Encoding: gzip`）请求大响应（如 366KB 的 SPA 主 JS）时，
+  网关自行 gzip 但 **Content-Length 仍是未压缩大小**（366721 vs 实际 ~111KB），
+  客户端等不满声明字节即断流：Chrome 报 `net::ERR_HTTP2_PROTOCOL_ERROR`，
+  curl exit 18（transfer closed with outstanding data）→ module script 加载失败 → 白屏。
+- 适配层的应对（`index.js` 的 `gzipResponse`）：自己预压缩并声明正确长度。
+  但实测网关**不看 Content-Encoding 头，会把已压缩的 body 再压一遍**（双重 gzip，
+  `1f 8b` 套 `1f 8b`），浏览器解一层后拿到乱码 → `SyntaxError`。
+  最终方案：预压缩时**不设 content-length**，让网关用 `Transfer-Encoding: chunked`
+  分块传输 —— 字节流完整，curl/HTTP1.1 下可用；但 HTTP/2 + Chrome 下仍偶发断流，
+  所以**正式入口固定走静态托管**（静态托管的 CDN 没有此 bug，主站 366KB JS 一直正常）。
+- 教训：**云函数 URL 化只适合小 JSON 响应**（API 全部 <65KB，无恙）；
+  大静态资源一律走前端网页托管。
+
 ### 控制台必须有一处配置：「索引文件」= `index.html`
 
 `/` 返回什么**由支付宝云静态站点的「索引文件」配置决定，不是由根目录里有没有 `index.html` 决定**

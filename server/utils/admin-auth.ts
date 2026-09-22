@@ -103,6 +103,15 @@ export function sessionSecret(): string {
   return (process.env.SESSION_SECRET || "").trim() || (process.env.ADMIN_PASSWORD || "").trim();
 }
 
+/**
+ * 读取会话令牌原文（不校验）：x-admin-session 头优先，Cookie 兜底。
+ * 供 session.get 等只需「拿令牌去验签」的场景复用，与 requireAdminToken 同一通道顺序。
+ */
+export function readSessionToken(event: H3Event): string | null {
+  const token = (getHeader(event, SESSION_HEADER) || getCookie(event, SESSION_COOKIE) || "").trim();
+  return token || null;
+}
+
 /** 事件处理器内的守卫入口：通过则返回，否则抛出对应的 HTTP 错误 */
 export function requireAdminToken(event: H3Event): void {
   const adminPassword = (process.env.ADMIN_PASSWORD || "").trim();

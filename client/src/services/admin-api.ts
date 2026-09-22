@@ -1,7 +1,9 @@
 // 管理后台 API 客户端。
 //
 // 与 blog-api.ts 的差异：
-// - 全部请求带 credentials: 'include'（HttpOnly 会话 Cookie 由浏览器自动携带）
+// - 会话携带：优先 x-admin-session 头（跨域部署下浏览器拦截第三方 Cookie，
+//   Chrome 逐步淘汰 3P cookie，SameSite=None 也救不了）；同时保留 credentials:
+//   'include'（同源部署时 HttpOnly Cookie 仍可无感使用，双通道并存）
 // - 错误不静默吞掉：管理操作必须让用户看到失败原因，不能像前台那样降级成空数据
 //
 // 端点清单（对应 server/routes/api/admin/*）：
@@ -14,6 +16,22 @@
 const API_ORIGIN = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/+$/, '');
 const ADMIN_BASE = API_ORIGIN ? `${API_ORIGIN}/api/admin` : './api/admin';
 const POSTS_BASE = API_ORIGIN ? `${API_ORIGIN}/api/blog` : './api/blog';
+
+// 会话令牌：内存优先（刷新即失，XSS 面最小），localStorage 兜底（刷新不掉登录）。
+// key 不含敏感信息；令牌本身 7 天过期，泄露可换 ADMIN_PASSWORD 全端作废。
+const TOKEN_KEY = 'mz_admin_session_token';
+let sessionToken: string | null = null;
+
+function authHeaders(): Record<string, string> {
+  if (!sessionToken) sessionToken = localStorage.getItem(TOKEN_KEY);
+  return sessionToken ? { 'x-admin-session': sessionToken } : {};
+}
+
+function persistToken(token: string | null): void {
+  sessionToken = token;
+  if (token) localStorage.setItem(TOKEN_KEY, token);
+  else localStorage.removeItem(TOKEN_KEY);
+}
 
 export interface SessionInfo {
   authenticated: boolean;
@@ -50,7 +68,7 @@ async function parse<T>(res: Response): Promise<T> {
 /** 登录态探测：401/其他错误一律返回未登录（页面据此显示登录表单） */
 export async function getSession(): Promise<SessionInfo> {
   try {
-    const res = await fetch(`${ADMIN_BASE}/session`, { credentials: 'include' });
+    const res = await fetch(`${ADMIN_BASE}/session`, { credentials: 'include', headers: authHeaders() });
     return await parse<SessionInfo>(res);
   } catch {
     return { authenticated: false };
@@ -65,11 +83,14 @@ export async function login(password: string): Promise<SessionInfo> {
     headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
     body: JSON.stringify({ password }),
   });
-  return parse<SessionInfo>(res);
+  const info = await parse<SessionInfo & { token?: string }>(res);
+  if (info.token) persistToken(info.token);
+  return info;
 }
 
 export async function logout(): Promise<void> {
-  await fetch(`${ADMIN_BASE}/logout`, { method: 'POST', credentials: 'include' }).catch(() => undefined);
+  await fetch(`${ADMIN_BASE}/logout`, { method: 'POST', credentials: 'include', headers: authHeaders() }).catch(() => undefined);
+  persistToken(null);
 }
 
 export interface DataExport {
@@ -81,7 +102,7 @@ export interface DataExport {
 
 /** 全库导出（seed 同构格式）：编辑前先拉最新，防 replace 把线上新数据刷回旧快照 */
 export async function exportData(): Promise<DataExport> {
-  const res = await fetch(`${ADMIN_BASE}/data-export`, { credentials: 'include' });
+  const res = await fetch(`${ADMIN_BASE}/data-export`, { credentials: 'include', headers: authHeaders() });
   return parse<DataExport>(res);
 }
 
@@ -99,7 +120,7 @@ export interface AdminArticle {
 export async function listAllArticles(): Promise<AdminArticle[]> {
   const res = await fetch(
     `${POSTS_BASE}/posts?page=1&pageSize=500`,
-    { credentials: 'include', headers: { Accept: 'application/json' } },
+    { credentials: 'include', headers: { Accept: 'application/json', ...authHeaders() } },
   );
   const json = (await res.json()) as { code: number; data?: { items: AdminArticle[] } };
   if (json.code !== 0 || !json.data) throw new Error('文章列表加载失败');
@@ -109,7 +130,7 @@ export async function listAllArticles(): Promise<AdminArticle[]> {
 export async function getArticleContent(id: string): Promise<AdminArticle> {
   const res = await fetch(`${POSTS_BASE}/posts/${encodeURIComponent(id)}`, {
     credentials: 'include',
-    headers: { Accept: 'application/json' },
+    headers: { Accept: 'application/json', ...authHeaders() },
   });
   const json = (await res.json()) as { code: number; data?: AdminArticle; msg?: string };
   if (json.code !== 0 || !json.data) throw new Error(json.msg || '文章加载失败');
@@ -120,7 +141,7 @@ export async function saveArticleContent(id: string, content: string): Promise<v
   const res = await fetch(`${POSTS_BASE}/posts/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     credentials: 'include',
-    headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
+    headers: { 'Content-Type': 'text/plain;charset=UTF-8', ...authHeaders() },
     body: JSON.stringify({ content }),
   });
   if (res.status === 401) throw new Error('登录已过期，请重新登录');
