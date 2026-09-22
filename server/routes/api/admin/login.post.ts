@@ -2,7 +2,7 @@ import { createError, setResponseStatus, type H3Event } from "h3";
 import { readJsonBody } from "~~/utils/body";
 import { timingSafeEqual, createHash } from "node:crypto";
 import { signSession, SESSION_TTL_SEC } from "~~/utils/session";
-import { setSessionCookie, SESSION_COOKIE_NAME } from "~~/utils/session-cookie";
+import { setSessionCookie } from "~~/utils/session-cookie";
 import { sessionSecret } from "~~/utils/admin-auth";
 import { createLoginThrottle } from "~~/utils/login-throttle";
 

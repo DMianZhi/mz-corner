@@ -5,7 +5,10 @@
  * 业务逻辑全部在 nitro/ 目录（构建时注入），本文件只做协议转换。
  */
 
-const CORS_METHODS = 'GET,POST,PATCH,OPTIONS';
+// PUT/DELETE 一并列出：本地 harness 与自建宿主会真的执行下面那段 OPTIONS 短路。
+// 但云端网关的预检不可配置，业务端点**不依赖**这两个方法（见 server/routes/api/admin/content）。
+const CORS_METHODS = 'GET,POST,PATCH,PUT,DELETE,OPTIONS';
+// 仅在浏览器没发 access-control-request-headers 时兜底；正常路径走回显（见 corsHeaders）。
 const CORS_HEADERS = 'content-type,accept';
 
 /**
@@ -59,6 +62,16 @@ function corsHeaders(event) {
     'access-control-max-age': '86400',
     vary: 'Origin',
   };
+  // 回显浏览器要用的头，而不是发固定白名单。
+  //
+  // 管理端靠自定义头 `x-admin-session` 携带会话，固定白名单必然把它挡在预检外
+  // （云端之所以没暴露这个问题，是因为网关自己劫持 OPTIONS 回了 Allow-Headers:*）。
+  // 回显对本地 harness 与自建宿主都成立，且新增自定义头时无需改这里。
+  const rawRequested =
+    event && event.headers
+      ? event.headers['access-control-request-headers'] || event.headers['Access-Control-Request-Headers']
+      : undefined;
+  if (rawRequested) headers['access-control-allow-headers'] = String(rawRequested);
   if (allow) headers['access-control-allow-origin'] = allow;
   return headers;
 }

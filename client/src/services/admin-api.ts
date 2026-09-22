@@ -17,7 +17,6 @@
 
 const API_ORIGIN = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/+$/, '');
 const ADMIN_BASE = API_ORIGIN ? `${API_ORIGIN}/api/admin` : './api/admin';
-const POSTS_BASE = API_ORIGIN ? `${API_ORIGIN}/api/blog` : './api/blog';
 
 // 会话令牌：内存优先（刷新即失，XSS 面最小），localStorage 兜底（刷新不掉登录）。
 // key 不含敏感信息；令牌本身 7 天过期，泄露可换 ADMIN_PASSWORD 全端作废。
@@ -54,7 +53,14 @@ async function parse<T>(res: Response): Promise<T> {
     throw new Error('失败次数过多，请 15 分钟后再试');
   }
   if (!res.ok) {
-    throw new Error(`HTTP ${res.status}`);
+    // 服务端用 createError 报错，statusMessage 里才是真正有用的中文原因
+    // （如「标题不能为空」）；吞掉它只剩 HTTP 400 会让用户无从下手
+    const detail = (await res.json().catch(() => null)) as {
+      statusMessage?: string;
+      message?: string;
+      msg?: string;
+    } | null;
+    throw new Error(detail?.statusMessage || detail?.message || detail?.msg || `HTTP ${res.status}`);
   }
   const json = (await res.json()) as { code?: number; msg?: string; data?: T };
   // 后端约定：code 0 = 成功；login/session 端点直接回对象（无 code 包装）
@@ -84,9 +90,15 @@ export async function login(password: string): Promise<SessionInfo> {
     headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
     body: JSON.stringify({ password }),
   });
-  const info = await parse<SessionInfo & { token?: string }>(res);
-  if (info.token) persistToken(info.token);
-  return info;
+  // 服务端契约是 { ok, token, expiresInSec }，**没有** code/data 包装，
+  // 也没有 authenticated 字段。这里统一归一化成 SessionInfo，
+  // 否则调用方按 info.authenticated 判断会永远为假（登录成功却报「口令不正确」）。
+  const raw = await parse<{ token?: string; expiresInSec?: number; authenticated?: boolean }>(res);
+  if (raw.token) persistToken(raw.token);
+  return {
+    authenticated: Boolean(raw.token) || Boolean(raw.authenticated),
+    expiresAt: raw.expiresInSec ? Math.floor(Date.now() / 1000) + raw.expiresInSec : undefined,
+  };
 }
 
 export async function logout(): Promise<void> {
@@ -107,43 +119,103 @@ export async function exportData(): Promise<DataExport> {
   return parse<DataExport>(res);
 }
 
-export interface AdminArticle {
-  id: string;
-  title: string;
-  content: string;
-  category: string;
-  status: string;
-  publishDate: string;
-  viewCount: number;
+
+// ── 通用内容 API ─────────────────────────────────────────────
+// 四类内容（文章 / 项目 / 评论 / 站点设置）共用一套端点，字段白名单在服务端
+// （server/utils/content-schema.ts）。前端表单由 GET /content 返回的元数据驱动，
+// 这里因此不硬编码字段清单——服务端加了字段，后台表单自动出现。
+
+export type FieldType = 'string' | 'text' | 'number' | 'string[]' | 'enum';
+
+export interface ContentField {
+  name: string;
+  label: string;
+  type: FieldType;
+  required?: boolean;
+  max?: number;
+  itemMax?: number;
+  enumValues?: string[];
+  hint?: string;
 }
 
-/** 管理列表直接复用前台分页接口（pageSize 拉大以覆盖全量，博容量级下无压力） */
-export async function listAllArticles(): Promise<AdminArticle[]> {
-  const res = await fetch(
-    `${POSTS_BASE}/posts?page=1&pageSize=500`,
-    { headers: { Accept: 'application/json', ...authHeaders() } },
+export interface ContentCollectionMeta {
+  name: string;
+  label: string;
+  fields: ContentField[];
+}
+
+/** 集合内的原始文档（含 _id；其余字段随集合而异，故用索引签名） */
+export interface ContentDocument {
+  _id: string;
+  [field: string]: unknown;
+}
+
+async function adminRequest(path: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(`${ADMIN_BASE}${path}`, {
+    ...init,
+    headers: { ...(init.headers as Record<string, string> | undefined), ...authHeaders() },
+  });
+}
+
+// 写操作统一用 text/plain 发 JSON：绕开网关对 OPTIONS 预检的劫持（原因见文件头注释）
+const JSON_TEXT_HEADERS = { 'Content-Type': 'text/plain;charset=UTF-8' };
+
+export async function fetchContentSchema(): Promise<ContentCollectionMeta[]> {
+  const data = await parse<{ collections: ContentCollectionMeta[] }>(await adminRequest('/content'));
+  return data.collections;
+}
+
+export async function listContent(collection: string): Promise<ContentDocument[]> {
+  const path = `/content/${encodeURIComponent(collection)}`;
+  const data = await parse<{ items: ContentDocument[] }>(await adminRequest(path));
+  return data.items;
+}
+
+export async function createContent(
+  collection: string,
+  fields: Record<string, unknown>,
+): Promise<string> {
+  const res = await adminRequest(`/content/${encodeURIComponent(collection)}`, {
+    method: 'POST',
+    headers: JSON_TEXT_HEADERS,
+    body: JSON.stringify(fields),
+  });
+  const data = await parse<{ id: string }>(res);
+  return data.id;
+}
+
+export async function updateContent(
+  collection: string,
+  id: string,
+  fields: Record<string, unknown>,
+): Promise<void> {
+  const path = `/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}`;
+  await parse(
+    await adminRequest(path, {
+      method: 'PATCH',
+      headers: JSON_TEXT_HEADERS,
+      body: JSON.stringify(fields),
+    }),
   );
-  const json = (await res.json()) as { code: number; data?: { items: AdminArticle[] } };
-  if (json.code !== 0 || !json.data) throw new Error('文章列表加载失败');
-  return json.data.items;
 }
 
-export async function getArticleContent(id: string): Promise<AdminArticle> {
-  const res = await fetch(`${POSTS_BASE}/posts/${encodeURIComponent(id)}`, {
-    headers: { Accept: 'application/json', ...authHeaders() },
-  });
-  const json = (await res.json()) as { code: number; data?: AdminArticle; msg?: string };
-  if (json.code !== 0 || !json.data) throw new Error(json.msg || '文章加载失败');
-  return json.data;
+export async function deleteContent(collection: string, id: string): Promise<number> {
+  // 走 POST 而非 DELETE：网关 CORS 方法表固定，DELETE 未经验证（见 admin-api 文件头）
+  const path = `/content/${encodeURIComponent(collection)}/${encodeURIComponent(id)}/delete`;
+  const data = await parse<{ deleted: number }>(await adminRequest(path, { method: 'POST' }));
+  return data.deleted ?? 0;
 }
 
-export async function saveArticleContent(id: string, content: string): Promise<void> {
-  const res = await fetch(`${POSTS_BASE}/posts/${encodeURIComponent(id)}`, {
+/** 集合级批量更新：站点设置这类「一组 key-value 文档」一次请求存完 */
+export async function bulkUpdateContent(
+  collection: string,
+  items: Array<Record<string, unknown> & { _id: string }>,
+): Promise<number> {
+  const res = await adminRequest(`/content/${encodeURIComponent(collection)}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'text/plain;charset=UTF-8', ...authHeaders() },
-    body: JSON.stringify({ content }),
+    headers: JSON_TEXT_HEADERS,
+    body: JSON.stringify({ items }),
   });
-  if (res.status === 401) throw new Error('登录已过期，请重新登录');
-  const json = (await res.json()) as { code: number; msg?: string };
-  if (json.code !== 0) throw new Error(json.msg || '保存失败');
+  const data = await parse<{ updated: number }>(res);
+  return data.updated ?? 0;
 }

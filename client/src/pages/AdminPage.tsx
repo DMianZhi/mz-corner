@@ -1,317 +1,104 @@
-// 管理后台页（HashRouter: /#/admin）。
+// 管理后台页面壳（方案 B：顶部标签 + 全页沉浸编辑）。
 //
-// 三态流转：session 探测中 → 未登录（口令表单） → 已登录（文章列表 + 编辑器）。
-// 视觉遵循 Apple HIG：系统字体栈、--bg/--text-1 语义色随明暗、内联 SVG 图标。
-import { useEffect, useState, type CSSProperties } from 'react';
+// 结构：
+//   登录门 → 顶栏（品牌 + 分段标签 + 全库导出 / 退出）→ 四个内容面板
+//   文章面板选中一篇后，整页切换为沉浸式编辑器（列表被替换，而非弹窗/侧滑）
+//
+// 样式全部走 styles/admin.css 的 `adm-*` 类，那里引用站点设计令牌，
+// 因此配色与前台完全同源，明暗主题跟随 html.light 自动切换。
+import '@/styles/admin.css';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import { ArticleEditor, blankArticleDraft } from '@/components/admin/ArticleEditor';
+import { CommentsPanel } from '@/components/admin/CommentsPanel';
+import { ProjectsPanel } from '@/components/admin/ProjectsPanel';
+import { asText } from '@/components/admin/SchemaForm';
+import { SiteConfigPanel } from '@/components/admin/SiteConfigPanel';
+import { Badge, Button, EmptyState, Icon, MonoLabel, Tabs, TextInput } from '@/components/admin/ui';
 import {
-  getSession,
+  createContent,
   exportData,
-  listAllArticles,
-  getArticleContent,
-  saveArticleContent,
+  fetchContentSchema,
+  getSession,
+  listContent,
   login,
-  type AdminArticle,
+  logout,
+  type ContentCollectionMeta,
+  type ContentDocument,
 } from '@/services/admin-api';
-import { Markdown } from '@/components/Markdown';
 
 type Phase = 'probing' | 'locked' | 'ready';
+type TabKey = 'articles' | 'projects' | 'comments' | 'site_config';
 
-// ---- 内联 SVG 图标（currentColor 继承，无 emoji） ----
-const IconLock = () => (
-  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <rect x="5" y="10.5" width="14" height="9.5" rx="2.5" stroke="currentColor" strokeWidth="1.6" />
-    <path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-  </svg>
-);
-const IconSave = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path d="M5 12.5l4.5 4.5L19 7.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-const IconDownload = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5M5 19.5h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
-const IconLogout = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path d="M14 8V6.5A2.5 2.5 0 0 0 11.5 4H6.5A2.5 2.5 0 0 0 4 6.5v11A2.5 2.5 0 0 0 6.5 20h5a2.5 2.5 0 0 0 2.5-2.5V16M9.5 12H20m0 0l-3.5-3.5M20 12l-3.5 3.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-  </svg>
-);
+const STATUS_LABELS: Record<string, string> = { published: '已发布', draft: '草稿' };
 
-const cardStyle: CSSProperties = {
-  background: 'var(--bg-card)',
-  border: '1px solid var(--border-soft)',
-  borderRadius: 18,
-  padding: '40px 44px',
-  maxWidth: 400,
-  margin: '0 auto',
-  boxShadow: '0 8px 32px rgba(0,0,0,0.06)',
-};
-
-const inputStyle: CSSProperties = {
-  width: '100%',
-  padding: '11px 14px',
-  borderRadius: 10,
-  border: '1px solid var(--border-soft)',
-  background: 'var(--bg)',
-  color: 'var(--text-1)',
-  fontSize: 15,
-  outline: 'none',
-};
-
-const btnPrimaryStyle: CSSProperties = {
-  width: '100%',
-  padding: '12px 0',
-  borderRadius: 10,
-  border: 'none',
-  background: 'var(--brand)',
-  color: '#fff',
-  fontSize: 15,
-  fontWeight: 600,
-  cursor: 'pointer',
-};
+/** 401 一律退回登录门：会话过期时用户该看到重新登录，而不是一堆红色报错 */
+function isUnauthorized(error: unknown): boolean {
+  return error instanceof Error && error.name === 'Unauthorized';
+}
 
 function LoginGate(props: { onOk: () => void }) {
   const [pwd, setPwd] = useState('');
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState('');
+  const [error, setError] = useState('');
 
   const submit = async () => {
     if (!pwd || busy) return;
     setBusy(true);
-    setErr('');
+    setError('');
     try {
-      await login(pwd);
-      setPwd('');
-      props.onOk();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : '登录失败');
+      const info = await login(pwd);
+      if (info.authenticated) props.onOk();
+      else setError('口令不正确');
+    } catch (err) {
+      // 口令错时服务端回 401，parse 会抛出 name=Unauthorized 的错误，
+      // 直接展示它的 message（"UNAUTHORIZED"）对用户毫无意义
+      if (err instanceof Error && err.name === 'Unauthorized') setError('口令不正确');
+      else setError(err instanceof Error ? err.message : '登录失败');
     } finally {
       setBusy(false);
     }
   };
 
   return (
-    <div style={cardStyle}>
-      <div style={{ textAlign: 'center', color: 'var(--text-2)', marginBottom: 18 }}>
-        <IconLock />
-      </div>
-      <h1 className="m-0" style={{ fontSize: 20, fontWeight: 700, textAlign: 'center', color: 'var(--text-1)' }}>
-        管理登录
-      </h1>
-      <p style={{ fontSize: 13, color: 'var(--text-2)', textAlign: 'center', margin: '10px 0 24px' }}>
-        输入管理口令解锁内容编辑
-      </p>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          void submit();
-        }}
-        style={{ display: 'flex', flexDirection: 'column', gap: 12 }}
-      >
-        <input
-          type="password"
-          value={pwd}
-          onChange={(e) => setPwd(e.target.value)}
-          placeholder="管理口令"
-          autoFocus
-          autoComplete="current-password"
-          style={inputStyle}
-        />
-        {err ? <div style={{ fontSize: 13, color: '#e0524d' }}>{err}</div> : null}
-        <button type="submit" disabled={busy || !pwd} style={{ ...btnPrimaryStyle, opacity: busy || !pwd ? 0.5 : 1 }}>
-          {busy ? '验证中…' : '登录'}
-        </button>
-      </form>
-    </div>
-  );
-}
-
-function Dashboard(props: { onLogout: () => void }) {
-  const [articles, setArticles] = useState<AdminArticle[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const [draft, setDraft] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [dirty, setDirty] = useState(false);
-
-  useEffect(() => {
-    let alive = true;
-    listAllArticles()
-      .then((items) => {
-        if (alive) setArticles(items);
-      })
-      .catch((e) => toast.error(e instanceof Error ? e.message : '加载失败'))
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  const openArticle = async (id: string) => {
-    try {
-      const art = await getArticleContent(id);
-      setActiveId(id);
-      setDraft(art.content);
-      setDirty(false);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : '加载文章失败');
-    }
-  };
-
-  const save = async () => {
-    if (!activeId || !dirty || saving) return;
-    setSaving(true);
-    try {
-      await saveArticleContent(activeId, draft.trim());
-      toast.success('已保存');
-      setDirty(false);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : '保存失败');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const download = async () => {
-    try {
-      const data = await exportData();
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `mz-corner-export-${new Date().toISOString().slice(0, 10)}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success('已导出全库 JSON');
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : '导出失败');
-    }
-  };
-
-  const active = articles.find((a) => a.id === activeId) ?? null;
-  const list = [...articles].sort((a, b) => (a.publishDate < b.publishDate ? 1 : -1));
-
-  return (
-    <div className="mx-auto" style={{ maxWidth: 'var(--content-w)', padding: '0 var(--gutter) 80px' }}>
-      <div className="flex items-center justify-between" style={{ marginBottom: 24 }}>
-        <div>
-          <div className="kicker-site"><span className="kicker-num">99</span>ADMIN</div>
-          <h1 className="text-h1-site m-0 mt-2" style={{ color: 'var(--text-1)', fontSize: 26 }}>内容管理</h1>
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'grid',
+        placeItems: 'center',
+        // 登录卡在 nav 以下的区域居中（与其它页面同一套让位约定）
+        padding: 'calc(var(--nav-h) + 24px) 24px 24px',
+      }}
+    >
+      <div className="adm-card adm-fade" style={{ width: '100%', maxWidth: 380, padding: 30 }}>
+        <div className="adm-brand" style={{ marginBottom: 6 }}>
+          <span className="adm-brand-mark">
+            <Icon.Lock size={14} />
+          </span>
+          <span className="adm-brand-text">管理后台</span>
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => void download()}
-            className="flex items-center gap-1.5"
-            style={{
-              padding: '8px 14px', borderRadius: 10, fontSize: 13,
-              border: '1px solid var(--border-soft)', background: 'var(--bg-card)',
-              color: 'var(--text-2)', cursor: 'pointer',
-            }}
-          >
-            <IconDownload /> 导出全库
-          </button>
-          <button
-            onClick={props.onLogout}
-            className="flex items-center gap-1.5"
-            style={{
-              padding: '8px 14px', borderRadius: 10, fontSize: 13,
-              border: '1px solid var(--border-soft)', background: 'var(--bg-card)',
-              color: 'var(--text-2)', cursor: 'pointer',
-            }}
-          >
-            <IconLogout /> 退出
-          </button>
-        </div>
-      </div>
+        <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 22px', lineHeight: 1.6 }}>
+          输入管理口令以编辑站点内容。会话有效期 7 天，期间无需重复登录。
+        </p>
 
-      <div className="grid gap-6 md:grid-cols-12">
-        {/* 文章列表 */}
-        <div className="md:col-span-4">
-          <div style={{ ...cardStyle, padding: 18, margin: 0, maxHeight: 560, overflowY: 'auto' }}>
-            {loading ? (
-              <div style={{ fontSize: 13, color: 'var(--text-2)', padding: '12px 4px' }}>加载中…</div>
-            ) : (
-              list.map((a) => (
-                <button
-                  key={a.id}
-                  onClick={() => void openArticle(a.id)}
-                  style={{
-                    display: 'block', width: '100%', textAlign: 'left',
-                    padding: '12px 14px', borderRadius: 10, border: 'none',
-                    background: a.id === activeId ? 'rgba(0,122,255,0.10)' : 'transparent',
-                    color: a.id === activeId ? 'var(--brand)' : 'var(--text-1)',
-                    fontSize: 14, fontWeight: a.id === activeId ? 600 : 400,
-                    cursor: 'pointer', marginBottom: 4,
-                  }}
-                >
-                  <div style={{ WebkitLineClamp: 1, overflow: 'hidden' }}>{a.title || a.id}</div>
-                  <div className="font-mono-site" style={{ fontSize: 11, color: 'var(--text-2)', marginTop: 2 }}>
-                    {a.publishDate} · {a.viewCount} 阅读 · {a.status}
-                  </div>
-                </button>
-              ))
-            )}
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submit();
+          }}
+        >
+          <TextInput value={pwd} onChange={setPwd} placeholder="管理口令" disabled={busy} />
+          {error ? (
+            <div className="adm-field-error" style={{ marginTop: 8 }}>
+              {error}
+            </div>
+          ) : null}
+          <div style={{ marginTop: 16 }}>
+            <Button variant="primary" full loading={busy} type="submit" disabled={!pwd}>
+              登录
+            </Button>
           </div>
-        </div>
-
-        {/* 编辑器 */}
-        <div className="md:col-span-8">
-          {!active ? (
-            <div style={{ ...cardStyle, padding: 36, textAlign: 'center', color: 'var(--text-2)', fontSize: 14 }}>
-              从左侧选择一篇文章开始编辑
-            </div>
-          ) : (
-            <div>
-              <div className="flex items-center justify-between" style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-1)' }}>{active.title}</div>
-                <button
-                  onClick={() => void save()}
-                  disabled={!dirty || saving}
-                  className="flex items-center gap-1.5"
-                  style={{
-                    padding: '8px 16px', borderRadius: 10, fontSize: 13, fontWeight: 600,
-                    border: 'none', background: 'var(--brand)', color: '#fff',
-                    cursor: dirty && !saving ? 'pointer' : 'default',
-                    opacity: dirty && !saving ? 1 : 0.4,
-                  }}
-                >
-                  <IconSave /> {saving ? '保存中…' : '保存'}
-                </button>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <textarea
-                  value={draft}
-                  onChange={(e) => {
-                    setDraft(e.target.value);
-                    setDirty(true);
-                  }}
-                  spellCheck={false}
-                  style={{
-                    width: '100%', minHeight: 480, padding: 16, borderRadius: 12,
-                    border: '1px solid var(--border-soft)', background: 'var(--bg)',
-                    color: 'var(--text-1)', fontSize: 13.5, lineHeight: 1.75,
-                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                    outline: 'none', resize: 'vertical',
-                  }}
-                />
-                <div
-                  style={{
-                    minHeight: 480, padding: 16, borderRadius: 12, overflowY: 'auto',
-                    border: '1px solid var(--border-soft)', background: 'var(--bg-card)',
-                    maxHeight: 640,
-                  }}
-                >
-                  <Markdown source={draft || '（预览区）'} />
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+        </form>
       </div>
     </div>
   );
@@ -319,34 +106,350 @@ function Dashboard(props: { onLogout: () => void }) {
 
 export default function AdminPage() {
   const [phase, setPhase] = useState<Phase>('probing');
+  const [tab, setTab] = useState<TabKey>('articles');
+  const [schema, setSchema] = useState<ContentCollectionMeta[]>([]);
+  const [articles, setArticles] = useState<ContentDocument[]>([]);
+  const [projects, setProjects] = useState<ContentDocument[]>([]);
+  const [comments, setComments] = useState<ContentDocument[]>([]);
+  const [config, setConfig] = useState<ContentDocument[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
-    let alive = true;
-    getSession().then((s) => {
-      if (alive) setPhase(s.authenticated ? 'ready' : 'locked');
-    });
-    return () => {
-      alive = false;
-    };
+    void bootstrap();
+    // 仅在挂载时探测一次会话
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const loadAll = async () => {
+    const [meta, nextArticles, nextProjects, nextComments, nextConfig] = await Promise.all([
+      fetchContentSchema(),
+      listContent('articles'),
+      listContent('projects'),
+      listContent('comments'),
+      listContent('site_config'),
+    ]);
+    setSchema(meta);
+    setArticles(nextArticles);
+    setProjects(nextProjects);
+    setComments(nextComments);
+    setConfig(nextConfig);
+  };
+
+  const bootstrap = async () => {
+    const session = await getSession();
+    if (!session.authenticated) {
+      setPhase('locked');
+      return;
+    }
+    try {
+      await loadAll();
+      setLoadError('');
+      setPhase('ready');
+    } catch (error) {
+      if (isUnauthorized(error)) {
+        setPhase('locked');
+        return;
+      }
+      setLoadError(error instanceof Error ? error.message : '加载失败');
+      setPhase('ready');
+    }
+  };
+
+  const reload = async (name: TabKey) => {
+    const items = await listContent(name);
+    if (name === 'articles') setArticles(items);
+    else if (name === 'projects') setProjects(items);
+    else if (name === 'comments') setComments(items);
+    else setConfig(items);
+  };
+
+  const fieldsOf = (name: string) => schema.find((item) => item.name === name)?.fields ?? [];
+
+  const counts: Record<TabKey, number> = {
+    articles: articles.length,
+    projects: projects.length,
+    comments: comments.length,
+    site_config: config.length,
+  };
+
+  const createArticle = async () => {
+    setBusy(true);
+    try {
+      const id = await createContent('articles', blankArticleDraft(fieldsOf('articles')));
+      await reload('articles');
+      setEditingId(id);
+      toast.success('已新建草稿');
+    } catch (error) {
+      if (isUnauthorized(error)) setPhase('locked');
+      else toast.error(error instanceof Error ? error.message : '新建失败');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doExport = async () => {
+    setBusy(true);
+    try {
+      const data = await exportData();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `mz-corner-export-${new Date().toISOString().slice(0, 10)}.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      toast.success('已导出全库 JSON');
+    } catch (error) {
+      if (isUnauthorized(error)) setPhase('locked');
+      else toast.error(error instanceof Error ? error.message : '导出失败');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   if (phase === 'probing') {
     return (
-      <div style={{ paddingTop: 'calc(var(--nav-h) + 80px)', textAlign: 'center', color: 'var(--text-2)', fontSize: 14 }}>
-        正在检查登录态…
+      <div className="adm-shell" style={{ minHeight: '100vh' }}>
+        <div className="adm-empty" style={{ paddingTop: 120 }}>
+          <Icon.Spinner size={22} />
+          <span style={{ fontSize: 13 }}>正在校验会话…</span>
+        </div>
       </div>
     );
   }
+
   if (phase === 'locked') {
     return (
-      <div style={{ paddingTop: 'calc(var(--nav-h) + 64px)' }}>
-        <LoginGate onOk={() => setPhase('ready')} />
+      <div className="adm-shell">
+        <LoginGate
+          onOk={() => {
+            setPhase('probing');
+            void bootstrap();
+          }}
+        />
       </div>
     );
   }
+
+  const editing = editingId ? articles.find((doc) => doc._id === editingId) ?? null : null;
+
   return (
-    <div className="page-enter" style={{ paddingTop: 'calc(var(--nav-h) + 40px)' }}>
-      <Dashboard onLogout={() => setPhase('locked')} />
+    <div className="adm-shell" style={{ minHeight: '100vh' }}>
+      <header className="adm-topbar">
+        <div className="adm-brand">
+          <span className="adm-brand-mark">
+            <Icon.Sliders size={14} />
+          </span>
+          <span className="adm-brand-text">管理后台</span>
+        </div>
+
+        <Tabs<TabKey>
+          value={tab}
+          onChange={(next) => {
+            setTab(next);
+            setEditingId(null);
+          }}
+          options={[
+            { value: 'articles', label: '文章', icon: <Icon.Article size={14} />, count: counts.articles },
+            { value: 'projects', label: '项目', icon: <Icon.Folder size={14} />, count: counts.projects },
+            { value: 'comments', label: '评论', icon: <Icon.Comment size={14} />, count: counts.comments },
+            { value: 'site_config', label: '站点设置', icon: <Icon.Sliders size={14} />, count: counts.site_config },
+          ]}
+        />
+
+        <span style={{ flex: 1 }} />
+
+        <Button size="sm" variant="quiet" icon={<Icon.Download size={14} />} loading={busy} onClick={doExport}>
+          导出全库
+        </Button>
+        <Button
+          size="sm"
+          variant="quiet"
+          icon={<Icon.Logout size={14} />}
+          onClick={async () => {
+            await logout();
+            setPhase('locked');
+            toast.success('已退出登录');
+          }}
+        >
+          退出
+        </Button>
+      </header>
+
+      <main className="adm-page">
+        {loadError ? (
+          <div
+            className="adm-card"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              padding: '14px 18px',
+              marginBottom: 20,
+              borderColor: 'var(--danger)',
+            }}
+          >
+            <span style={{ color: 'var(--danger)' }}>
+              <Icon.Warning size={16} />
+            </span>
+            <span style={{ fontSize: 13 }}>{loadError}</span>
+            <span style={{ flex: 1 }} />
+            <Button
+              size="sm"
+              icon={<Icon.Refresh size={14} />}
+              onClick={() => {
+                setPhase('probing');
+                void bootstrap();
+              }}
+            >
+              重试
+            </Button>
+          </div>
+        ) : null}
+
+        {tab === 'articles' ? (
+          editing ? (
+            <ArticleEditor
+              article={editing}
+              fields={fieldsOf('articles')}
+              onSaved={() => reload('articles')}
+              onBack={() => setEditingId(null)}
+            />
+          ) : (
+            <div className="adm-fade">
+              <div className="adm-col-head" style={{ marginBottom: 14 }}>
+                <MonoLabel style={{ letterSpacing: '0.16em' }}>
+                  全部文章 · {articles.length}
+                </MonoLabel>
+                <hr className="adm-divider" style={{ flex: 1 }} />
+                <Button
+                  size="sm"
+                  variant="primary"
+                  icon={<Icon.Plus size={14} />}
+                  loading={busy}
+                  onClick={createArticle}
+                >
+                  新建文章
+                </Button>
+              </div>
+
+              {articles.length === 0 ? (
+                <div className="adm-card">
+                  <EmptyState
+                    icon={<Icon.Article size={18} />}
+                    title="还没有文章"
+                    hint="点右上角「新建文章」开始写第一篇。"
+                  />
+                </div>
+              ) : (
+                <div className="adm-list">
+                  {articles.map((doc) => {
+                    const status = asText(doc.status);
+                    return (
+                      <button
+                        key={doc._id}
+                        type="button"
+                        className="adm-row"
+                        onClick={() => setEditingId(doc._id)}
+                      >
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          <span className="adm-row-title" style={{ display: 'block' }}>
+                            {asText(doc.title) || '(无标题)'}
+                          </span>
+                          <span
+                            style={{
+                              display: 'block',
+                              fontSize: 12,
+                              color: 'var(--text-3)',
+                              marginTop: 3,
+                            }}
+                          >
+                            {asText(doc.category) || '未分类'} ·{' '}
+                            {asText(doc.publishDate) || '未设日期'}
+                          </span>
+                        </span>
+                        <span className="adm-row-meta">
+                          {asText(doc.viewCount) ? `${asText(doc.viewCount)} 次阅读` : ''}
+                        </span>
+                        <Badge tone={status === 'published' ? 'brand' : 'muted'}>
+                          {STATUS_LABELS[status] ?? status ?? '—'}
+                        </Badge>
+                        <span style={{ color: 'var(--text-3)' }}>
+                          <Icon.ChevronRight size={15} />
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* 数据概览：给「这台后台管着多少东西」一个总览 */}
+              <div style={{ marginTop: 34 }}>
+                <MonoLabel style={{ letterSpacing: '0.16em' }}>概览</MonoLabel>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+                    gap: 12,
+                    marginTop: 10,
+                  }}
+                >
+                  {(
+                    [
+                      ['文章', counts.articles],
+                      ['项目', counts.projects],
+                      ['评论', counts.comments],
+                      ['站点设置', counts.site_config],
+                    ] as Array<[string, number]>
+                  ).map(([label, count]) => (
+                    <div key={label} className="adm-card" style={{ padding: '16px 18px' }}>
+                      <MonoLabel>{label}</MonoLabel>
+                      <div
+                        style={{
+                          fontSize: 26,
+                          fontWeight: 600,
+                          letterSpacing: '-0.02em',
+                          marginTop: 6,
+                          color: 'var(--brand)',
+                        }}
+                      >
+                        {count}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )
+        ) : null}
+
+        {tab === 'projects' ? (
+          <ProjectsPanel
+            fields={fieldsOf('projects')}
+            documents={projects}
+            onReload={() => reload('projects')}
+          />
+        ) : null}
+
+        {tab === 'comments' ? (
+          <CommentsPanel
+            fields={fieldsOf('comments')}
+            documents={comments}
+            articleTitles={Object.fromEntries(articles.map((doc) => [doc._id, asText(doc.title)]))}
+            onReload={() => reload('comments')}
+          />
+        ) : null}
+
+        {tab === 'site_config' ? (
+          <SiteConfigPanel
+            fields={fieldsOf('site_config')}
+            documents={config}
+            onReload={() => reload('site_config')}
+          />
+        ) : null}
+      </main>
     </div>
   );
 }
