@@ -54,6 +54,19 @@ console.log("→ 注入云函数目录");
 await rm(targetDir, { recursive: true, force: true });
 await mkdir(path.dirname(targetDir), { recursive: true });
 await cp(path.join(outputDir, "server"), targetDir, { recursive: true });
+// SPA 静态资源：publicAssets 指向 ../client/dist，Nitro 构建时会把
+// client/dist 拷进 .output/public。云函数目录不带它的话，线上所有
+// 非 /api 路径（含管理页 /admin）都是 404。
+// 注意：必须拷到 targetDir 的同级（mz-corner-api/public），不是 nitro/public。
+// readAsset 用 nitro/index.mjs 的 _importMeta_.url 解析 assets path（../public/xxx），
+// 即 resolve(nitro/, '../public') = mz-corner-api/public —— 拷错层级 SPA 就是 500。
+const publicDir = path.join(outputDir, "public");
+if (existsSync(publicDir)) {
+  await cp(publicDir, path.join(targetDir, "..", "public"), { recursive: true });
+  console.log(`✔ SPA 静态资源已注入（${(await readdir(publicDir)).length} 项）`);
+} else {
+  console.warn("⚠ 未发现 .output/public —— 请先构建 client（pnpm --dir client build）");
+}
 
 /**
  * 找出产物内无法解析的裸导入。

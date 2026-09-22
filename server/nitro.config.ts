@@ -13,6 +13,10 @@ export default defineNitroConfig({
   externals: {
     inline: ['consola'],
   },
+  // aws-lambda 预设默认不伺服静态资源（serveStatic 未开），产物里只有 API 路由。
+  // 但云函数本身要伺服前端 SPA（publicAssets 指向 client/dist），
+  // 不开这个，线上所有非 /api 路径（含管理页 /admin）都是 404。
+  serveStatic: true,
   publicAssets: [
     {
       dir: '../client/dist',

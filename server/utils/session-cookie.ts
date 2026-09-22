@@ -1,5 +1,6 @@
 import { createError, getCookie, setCookie, deleteCookie, type H3Event } from "h3";
 import { SESSION_COOKIE_NAME, SESSION_TTL_SEC, verifySession } from "./session";
+import { sessionSecret } from "./admin-auth";
 
 export { SESSION_COOKIE_NAME };
 
@@ -33,7 +34,9 @@ export function clearSessionCookie(event: H3Event): void {
 
 /** 读取并校验会话 Cookie；有效返回 payload，无效/缺失返回 null（不抛错） */
 export function readSession(event: H3Event): { sub: string; iat: number; exp: number } | null {
-  const secret = process.env.SESSION_SECRET || "";
+  // 与 login 签发侧同源：sessionSecret()（SESSION_SECRET 优先，缺省派生自 ADMIN_PASSWORD）。
+  // 不能各自读环境变量——签发侧有 fallback、校验侧没有，会导致「登录成功但探测 401」。
+  const secret = sessionSecret();
   if (!secret) return null;
   const token = getCookie(event, SESSION_COOKIE_NAME) || "";
   if (!token) return null;
