@@ -1,4 +1,4 @@
-import { createError, getCookie, type H3Event } from "h3";
+import { createError, getCookie, setCookie, deleteCookie, type H3Event } from "h3";
 import { SESSION_COOKIE_NAME, SESSION_TTL_SEC, verifySession } from "./session";
 
 export { SESSION_COOKIE_NAME };

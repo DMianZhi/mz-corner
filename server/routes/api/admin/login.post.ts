@@ -1,4 +1,5 @@
 import { createError, setResponseStatus, type H3Event } from "h3";
+import { readJsonBody } from "~~/utils/body";
 import { timingSafeEqual, createHash } from "node:crypto";
 import { signSession, SESSION_TTL_SEC } from "~~/utils/session";
 import { setSessionCookie, SESSION_COOKIE_NAME } from "~~/utils/session-cookie";
@@ -26,7 +27,9 @@ export default defineEventHandler(async (event: H3Event) => {
     throw createError({ statusCode: 404, statusMessage: "Not Found" });
   }
 
-  const body = await readBody(event).catch(() => ({}));
+  // readJsonBody（非 readBody）：前端为绕开网关 OPTIONS 预检用 text/plain 发 JSON，
+  // h3 原生 readBody 对 text/plain 不做 JSON 解析，会拿到字符串导致口令恒为空
+  const body = await readJsonBody<{ password?: string }>(event).catch(() => undefined);
   const provided = typeof body?.password === "string" ? body.password : "";
   const ip =
     getRequestIP(event, { xForwardedFor: true }) ||

@@ -114,9 +114,19 @@ exports.main = async (event, context) => {
   try {
     const handler = await loadHandler();
     const result = await handler(toNitroEvent(event), context);
+    // Nitro（aws-lambda 预设）把 set-cookie 放进 multiValueHeaders，
+    // 其余头在 headers。uniCloud 集成响应只认单层 headers，
+    // 必须把 multiValueHeaders 合并进来，否则登录 Set-Cookie 会被静默丢弃。
+    const mergedHeaders = { ...(result.headers || {}), ...cors };
+    const multi = result.multiValueHeaders || {};
+    for (const [key, values] of Object.entries(multi)) {
+      if (Array.isArray(values) && values.length > 0) {
+        mergedHeaders[key] = values.length === 1 ? values[0] : values.join(', ');
+      }
+    }
     return composedResponse({
       statusCode: result.statusCode || 200,
-      headers: { ...(result.headers || {}), ...cors },
+      headers: mergedHeaders,
       body: result.body || '',
       isBase64Encoded: result.isBase64Encoded,
     });
