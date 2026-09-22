@@ -76,7 +76,7 @@ async function parse<T>(res: Response): Promise<T> {
 /** 登录态探测：401/其他错误一律返回未登录（页面据此显示登录表单） */
 export async function getSession(): Promise<SessionInfo> {
   try {
-    const res = await fetch(`${ADMIN_BASE}/session`, { headers: authHeaders() });
+    const res = await fetchWithRetry(`${ADMIN_BASE}/session`, { headers: authHeaders() });
     return await parse<SessionInfo>(res);
   } catch {
     return { authenticated: false };
@@ -115,7 +115,7 @@ export interface DataExport {
 
 /** 全库导出（seed 同构格式）：编辑前先拉最新，防 replace 把线上新数据刷回旧快照 */
 export async function exportData(): Promise<DataExport> {
-  const res = await fetch(`${ADMIN_BASE}/data-export`, { headers: authHeaders() });
+  const res = await fetchWithRetry(`${ADMIN_BASE}/data-export`, { headers: authHeaders() });
   return parse<DataExport>(res);
 }
 
@@ -150,8 +150,22 @@ export interface ContentDocument {
   [field: string]: unknown;
 }
 
+/**
+ * 冷启动/网关抖动兜底：首屏并发打四五个请求，线上实测偶发其中一个回 404
+ * （服务端「管理端未配置」的 404 刻意与「路径不存在」不可区分，无从按报文甄别）。
+ * GET 幂等，故统一重试一次；写操作不重试，避免重复提交。
+ */
+async function fetchWithRetry(url: string, init?: RequestInit): Promise<Response> {
+  const method = String((init && init.method) || 'GET').toUpperCase();
+  const send = () => fetch(url, init);
+  const res = await send();
+  if (method !== 'GET' || (res.status !== 404 && res.status < 500)) return res;
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  return send();
+}
+
 async function adminRequest(path: string, init: RequestInit = {}): Promise<Response> {
-  return fetch(`${ADMIN_BASE}${path}`, {
+  return fetchWithRetry(`${ADMIN_BASE}${path}`, {
     ...init,
     headers: { ...(init.headers as Record<string, string> | undefined), ...authHeaders() },
   });
