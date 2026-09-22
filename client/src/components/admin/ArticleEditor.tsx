@@ -1,12 +1,14 @@
 // 文章编辑器（方案 B：全页沉浸 + 浮动工具条）。
 //
-// 布局取舍：标题、元信息、正文分三层，正文区占满剩余视口高度；
+// 布局取舍：标题、元信息、正文分三层。整页不滚（滚动由 .adm-page 容器承担），
+// 正文 textarea 自动增高，保证全页只有一根滚动条 —— 内容长短变化时不会出现
+// 滚动条伸缩导致的横向抖动。
 // 模式切换（编辑 / 分屏 / 预览）放在**浮动 dock** 里而不是页头，
 // 因为它属于「写作时的手部动作」，贴着视线下方比回到顶部找按钮顺手。
 //
 // 已知坑（demo 阶段踩过）：dock 是 fixed 定位，会盖住正文最后几行 ——
 // 内容区必须留出底部内边距（.adm-editor-body 的 padding-bottom）。
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { Markdown } from '@/components/Markdown';
 import {
@@ -75,6 +77,16 @@ export function ArticleEditor(props: {
   const title = asText(values.title);
   const content = asText(values.content);
 
+  // 正文自动增高：textarea 若自带滚动，页面就会同时存在两根滚动条，
+  // 且内容长短变化时互相干扰。先置 auto 再按 scrollHeight 赋值，避免只增不减。
+  const taRef = useRef<HTMLTextAreaElement | null>(null);
+  useLayoutEffect(() => {
+    const el = taRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+  }, [content, mode]);
+
   return (
     <div className="adm-editor-body adm-fade">
       {/* 页头：返回 + 面包屑 + 站点预览入口 */}
@@ -130,6 +142,7 @@ export function ArticleEditor(props: {
 
       {mode === 'edit' ? (
         <textarea
+          ref={taRef}
           className="adm-textarea adm-textarea--code"
           value={content}
           spellCheck={false}
@@ -139,6 +152,7 @@ export function ArticleEditor(props: {
       ) : mode === 'split' ? (
         <div className="adm-split">
           <textarea
+            ref={taRef}
             className="adm-textarea adm-pane-input"
             value={content}
             spellCheck={false}

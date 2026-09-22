@@ -238,12 +238,15 @@ export function TextInput(props: {
   big?: boolean;
   disabled?: boolean;
   maxLength?: number;
+  /** 口令类字段传 'password' 以掩码回显；不传即普通文本输入框 */
+  type?: 'text' | 'password';
 }) {
   return (
     <input
       className={['adm-input', props.monospace ? 'adm-input--mono' : '', props.big ? 'adm-input--title' : '']
         .filter(Boolean)
         .join(' ')}
+      type={props.type ?? 'text'}
       value={props.value}
       placeholder={props.placeholder}
       disabled={props.disabled}

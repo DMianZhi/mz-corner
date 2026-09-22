@@ -18,16 +18,32 @@
      管理页统一由 shell 让位：否则吸附的 .adm-topbar（top: var(--nav-h)）会顶到
      nav 下面，而页面内容仍从 y=0 起算，编辑器头部整排被压住——返回/保存都点不到。 */
   padding-top: var(--nav-h);
+  /* 滚动条 thumb 专用色：--border-strong 只有 0.16 透明度，做发丝分割线合适，
+     做滚动条在近黑底上几乎看不见，故单独定义并随主题切换。 */
+  --adm-scrollbar-thumb: rgba(255, 255, 255, 0.26);
+  --adm-scrollbar-thumb-hover: rgba(255, 255, 255, 0.42);
+  /* 视口内固定高度：整页不再随内容长短出现/消失滚动条（Windows 上那会让
+     固定 Nav 与页面内容一起横向抖动）。滚动交给 .adm-page 在容器内完成。
+     box-sizing 显式声明，不依赖 Tailwind preflight 是否在场。 */
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 html.light .adm-shell {
+  --adm-scrollbar-thumb: rgba(20, 20, 22, 0.22);
+  --adm-scrollbar-thumb-hover: rgba(20, 20, 22, 0.36);
   color-scheme: light;
 }
 
 /* ── 顶栏 ─────────────────────────────────────────────── */
 
 .adm-topbar {
-  position: sticky;
-  top: var(--nav-h);
+  /* 不再是 sticky：shell 已是固定高度 flex 列，topbar 位于滚动容器之外，
+     天然不随内容滚动，也不需要 top 偏移。 */
+  position: relative;
+  flex-shrink: 0;
   z-index: 30;
   display: flex;
   align-items: center;
@@ -486,6 +502,14 @@ html.light .adm-shell {
 
 .adm-page {
   padding: 24px var(--gutter) 88px;
+  /* 唯一的滚动容器：flex:1 吃掉 shell 剩余高度，min-height:0 才允许它
+     收缩到小于内容高度（否则 flex 子项不会滚动）。 */
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* 始终预留滚动条槽位：内容长短变化时不再横向位移，这是「抖动」的真正来源 */
+  scrollbar-gutter: stable;
 }
 .adm-masterdetail {
   display: grid;
@@ -614,23 +638,25 @@ html.light .adm-shell {
   }
 }
 
-/* ── 滚动条 ───────────────────────────────────────────── */
+/* ── 滚动条（细条）────────────────────────────────────── */
 
-.adm-scroll::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+/* 统一作用到后台的滚动容器。:where() 保持零特异性，便于局部覆盖；
+   同时给 Firefox 的 scrollbar-width/color（::-webkit-* 对它无效）。 */
+:where(.adm-scroll, .adm-page) {
+  scrollbar-width: thin;
+  scrollbar-color: var(--adm-scrollbar-thumb) transparent;
 }
-.adm-scroll::-webkit-scrollbar-track {
+:where(.adm-scroll, .adm-page)::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+:where(.adm-scroll, .adm-page)::-webkit-scrollbar-track {
   background: transparent;
 }
-.adm-scroll::-webkit-scrollbar-thumb {
-  background: var(--border-strong);
-  border: 3px solid transparent;
-  background-clip: content-box;
+:where(.adm-scroll, .adm-page)::-webkit-scrollbar-thumb {
+  background: var(--adm-scrollbar-thumb);
   border-radius: 999px;
 }
-.adm-scroll::-webkit-scrollbar-thumb:hover {
-  background: var(--text-3);
-  border: 3px solid transparent;
-  background-clip: content-box;
+:where(.adm-scroll, .adm-page)::-webkit-scrollbar-thumb:hover {
+  background: var(--adm-scrollbar-thumb-hover);
 }

@@ -63,11 +63,15 @@ function LoginGate(props: { onOk: () => void }) {
   return (
     <div
       style={{
-        minHeight: '100vh',
+        // shell 已是固定高度 flex 列，这里用 flex:1 吃掉剩余高度；
+        // minHeight:0 才允许它在内容过高时收缩并自身滚动，而不是撑破 shell。
+        // 顶部让位已由 .adm-shell 的 padding-top 承担，此处不再重复加 nav 高度。
+        flex: 1,
+        minHeight: 0,
+        overflowY: 'auto',
         display: 'grid',
         placeItems: 'center',
-        // 登录卡在 nav 以下的区域居中（与其它页面同一套让位约定）
-        padding: 'calc(var(--nav-h) + 24px) 24px 24px',
+        padding: '24px',
       }}
     >
       <div className="adm-card adm-fade" style={{ width: '100%', maxWidth: 380, padding: 30 }}>
@@ -87,7 +91,7 @@ function LoginGate(props: { onOk: () => void }) {
             void submit();
           }}
         >
-          <TextInput value={pwd} onChange={setPwd} placeholder="管理口令" disabled={busy} />
+          <TextInput value={pwd} onChange={setPwd} placeholder="管理口令" disabled={busy} type="password" />
           {error ? (
             <div className="adm-field-error" style={{ marginTop: 8 }}>
               {error}
@@ -211,7 +215,7 @@ export default function AdminPage() {
 
   if (phase === 'probing') {
     return (
-      <div className="adm-shell" style={{ minHeight: '100vh' }}>
+      <div className="adm-shell">
         <div className="adm-empty" style={{ paddingTop: 120 }}>
           <Icon.Spinner size={22} />
           <span style={{ fontSize: 13 }}>正在校验会话…</span>
@@ -236,7 +240,7 @@ export default function AdminPage() {
   const editing = editingId ? articles.find((doc) => doc._id === editingId) ?? null : null;
 
   return (
-    <div className="adm-shell" style={{ minHeight: '100vh' }}>
+    <div className="adm-shell">
       <header className="adm-topbar">
         <div className="adm-brand">
           <span className="adm-brand-mark">
