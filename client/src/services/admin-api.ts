@@ -1,9 +1,11 @@
 // 管理后台 API 客户端。
 //
 // 与 blog-api.ts 的差异：
-// - 会话携带：优先 x-admin-session 头（跨域部署下浏览器拦截第三方 Cookie，
-//   Chrome 逐步淘汰 3P cookie，SameSite=None 也救不了）；同时保留 credentials:
-//   'include'（同源部署时 HttpOnly Cookie 仍可无感使用，双通道并存）
+// - 会话携带：x-admin-session 头（跨域部署下浏览器拦截第三方 Cookie，
+//   Chrome 逐步淘汰 3P cookie，SameSite=None 也救不了）。
+//   **不带 credentials**：uniCloud 网关劫持 OPTIONS 预检并回 Allow-Headers:*，
+//   该通配符仅在无凭据请求中合法（CORS 规范）；带 credentials 会被浏览器拒发。
+//   同源部署时 Cookie 通道仍由服务端保留（curl/脚本可用），前端统一走 token 头
 // - 错误不静默吞掉：管理操作必须让用户看到失败原因，不能像前台那样降级成空数据
 //
 // 端点清单（对应 server/routes/api/admin/*）：
@@ -68,7 +70,7 @@ async function parse<T>(res: Response): Promise<T> {
 /** 登录态探测：401/其他错误一律返回未登录（页面据此显示登录表单） */
 export async function getSession(): Promise<SessionInfo> {
   try {
-    const res = await fetch(`${ADMIN_BASE}/session`, { credentials: 'include', headers: authHeaders() });
+    const res = await fetch(`${ADMIN_BASE}/session`, { headers: authHeaders() });
     return await parse<SessionInfo>(res);
   } catch {
     return { authenticated: false };
@@ -79,7 +81,6 @@ export async function login(password: string): Promise<SessionInfo> {
   // text/plain：绕开 uniCloud 网关对 OPTIONS 预检的拦截（同 blog-api.ts JSON_AS_TEXT 的原因）
   const res = await fetch(`${ADMIN_BASE}/login`, {
     method: 'POST',
-    credentials: 'include',
     headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
     body: JSON.stringify({ password }),
   });
@@ -89,7 +90,7 @@ export async function login(password: string): Promise<SessionInfo> {
 }
 
 export async function logout(): Promise<void> {
-  await fetch(`${ADMIN_BASE}/logout`, { method: 'POST', credentials: 'include', headers: authHeaders() }).catch(() => undefined);
+  await fetch(`${ADMIN_BASE}/logout`, { method: 'POST', headers: authHeaders() }).catch(() => undefined);
   persistToken(null);
 }
 
@@ -102,7 +103,7 @@ export interface DataExport {
 
 /** 全库导出（seed 同构格式）：编辑前先拉最新，防 replace 把线上新数据刷回旧快照 */
 export async function exportData(): Promise<DataExport> {
-  const res = await fetch(`${ADMIN_BASE}/data-export`, { credentials: 'include', headers: authHeaders() });
+  const res = await fetch(`${ADMIN_BASE}/data-export`, { headers: authHeaders() });
   return parse<DataExport>(res);
 }
 
@@ -120,7 +121,7 @@ export interface AdminArticle {
 export async function listAllArticles(): Promise<AdminArticle[]> {
   const res = await fetch(
     `${POSTS_BASE}/posts?page=1&pageSize=500`,
-    { credentials: 'include', headers: { Accept: 'application/json', ...authHeaders() } },
+    { headers: { Accept: 'application/json', ...authHeaders() } },
   );
   const json = (await res.json()) as { code: number; data?: { items: AdminArticle[] } };
   if (json.code !== 0 || !json.data) throw new Error('文章列表加载失败');
@@ -129,7 +130,6 @@ export async function listAllArticles(): Promise<AdminArticle[]> {
 
 export async function getArticleContent(id: string): Promise<AdminArticle> {
   const res = await fetch(`${POSTS_BASE}/posts/${encodeURIComponent(id)}`, {
-    credentials: 'include',
     headers: { Accept: 'application/json', ...authHeaders() },
   });
   const json = (await res.json()) as { code: number; data?: AdminArticle; msg?: string };
@@ -140,7 +140,6 @@ export async function getArticleContent(id: string): Promise<AdminArticle> {
 export async function saveArticleContent(id: string, content: string): Promise<void> {
   const res = await fetch(`${POSTS_BASE}/posts/${encodeURIComponent(id)}`, {
     method: 'PATCH',
-    credentials: 'include',
     headers: { 'Content-Type': 'text/plain;charset=UTF-8', ...authHeaders() },
     body: JSON.stringify({ content }),
   });

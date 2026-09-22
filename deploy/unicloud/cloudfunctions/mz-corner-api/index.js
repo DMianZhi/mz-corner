@@ -118,41 +118,19 @@ function composedResponse({ statusCode = 200, headers = {}, body = '', isBase64E
  * data）、Chrome 报 net::ERR_HTTP2_PROTOCOL_ERROR，SPA module script 加载失败
  * → 整站白屏。Chrome 默认带 Accept-Encoding: gzip，必中。
  *
- * 解法：适配层自己 gzip 并声明正确的 Content-Length。网关见 Content-Encoding
- * 已设就不再二次压缩，字节流自洽。仅对可压缩类型且 >1KB 的响应生效；
- * 客户端不支持 gzip 时原样返回。
+ * 解法（2026-09-22 最终版）：**适配层不做任何压缩**。
+ *
+ * 演进史（三次实测，别再走回头路）：
+ * 1. 不压缩 → 网关压大文件但 Content-Length 错 → 大 JS 断流白屏
+ *    （已解：静态资源迁 CDN，云函数域名只发 API JSON，均为小响应）
+ * 2. 适配层预压缩 + 正确 Content-Length → 网关对「base64+gzip+length」断流
+ * 3. 适配层预压缩 + 不设 length → 网关**无视 Content-Encoding 再压一遍**，
+ *    双重 gzip（实测 body 两层 1f8b），浏览器 JSON 解析失败
+ *
+ * 结论：网关的 gzip 行为不可控（见压缩就压、不看 Content-Encoding），
+ * 唯一自洽的形态是「明文出函数，让网关自己压」。API JSON 体量小，
+ * 网关压缩正确（chunked + 单层 gzip，实测可解）。
  */
-const COMPRESSIBLE = /text\/|application\/(javascript|json|xml|font|manifest)/;
-const MIN_COMPRESS_BYTES = 1024;
-
-function gzipResponse(result, headers, acceptEncoding) {
-  // 已经是压缩体（Nitro 产物或上游已处理）或客户端不支持 gzip：不动
-  if (headers['content-encoding']) return { headers, body: result.body, isBase64Encoded: result.isBase64Encoded };
-  if (!/gzip|\*/i.test(String(acceptEncoding || ''))) return { headers, body: result.body, isBase64Encoded: result.isBase64Encoded };
-
-  const contentType = String(headers['content-type'] || '');
-  if (!COMPRESSIBLE.test(contentType)) return { headers, body: result.body, isBase64Encoded: result.isBase64Encoded };
-
-  // body 可能是 base64（二进制资源）。统一解出原始字节再压缩。
-  const raw = result.isBase64Encoded
-    ? Buffer.from(String(result.body || ''), 'base64')
-    : Buffer.from(String(result.body || ''), 'utf8');
-  if (raw.length < MIN_COMPRESS_BYTES) return { headers, body: result.body, isBase64Encoded: result.isBase64Encoded };
-
-  const gzipped = require('node:zlib').gzipSync(raw);
-  // 压缩无收益（已压缩内容的再压缩反而变大）：放弃
-  if (gzipped.length >= raw.length) return { headers, body: result.body, isBase64Encoded: result.isBase64Encoded };
-
-  // 注意：不设 content-length。实测（2026-09-22）网关对「集成响应 + base64 + gzip +
-  // content-length」的组合会直接断流（curl exit 18、零字节）；去掉 content-length
-  // 后由网关自行分块传输，字节流完整。
-  const { 'content-length': _drop, ...rest } = headers;
-  return {
-    headers: { ...rest, 'content-encoding': 'gzip' },
-    body: gzipped.toString('base64'),
-    isBase64Encoded: true,
-  };
-}
 
 exports.main = async (event, context) => {
   const method = (event && event.httpMethod ? event.httpMethod : 'GET').toUpperCase();
@@ -181,17 +159,11 @@ exports.main = async (event, context) => {
         mergedHeaders[key] = values.length === 1 ? values[0] : values.join(', ');
       }
     }
-    // 预压缩（修复网关 gzip 截断 bug，见 gzipResponse 注释）。
-    // accept-encoding 在 toNitroEvent 里已小写化，这里从原始 event 取。
-    const rawAccept = (event.headers || {})[
-      Object.keys(event.headers || {}).find((k) => k.toLowerCase() === 'accept-encoding') || ''
-    ];
-    const gz = gzipResponse(result, mergedHeaders, rawAccept);
     return composedResponse({
       statusCode: result.statusCode || 200,
-      headers: gz.headers,
-      body: gz.body,
-      isBase64Encoded: gz.isBase64Encoded,
+      headers: mergedHeaders,
+      body: result.body,
+      isBase64Encoded: result.isBase64Encoded,
     });
   } catch (error) {
     console.error('[mz-corner-api] 处理失败:', error && error.stack ? error.stack : error);
