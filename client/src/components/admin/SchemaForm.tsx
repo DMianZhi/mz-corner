@@ -56,7 +56,8 @@ export function SchemaForm(props: {
   const visible = props.fields.filter((field) => !excluded.includes(field.name));
 
   return (
-    <div>
+    // 两列网格：铺满右栏后单列会把「分类」这类短字段拉成一条 1300px 的长条
+    <div className="adm-fields">
       {visible.map((field) => {
         const value = props.values[field.name];
         // 多行文本的标签与控件顶端对齐，否则标签会吊在文本框中间

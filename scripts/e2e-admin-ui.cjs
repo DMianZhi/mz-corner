@@ -114,6 +114,32 @@ function check(name, expected, actual) {
   const titleInput = page.locator('input[placeholder="文章标题"]');
   const originalTitle = await titleInput.inputValue();
   check('打开文章带入原值', true, originalTitle.length > 0);
+
+  // 铺满右栏：详情列卡 max-width 会让宽屏右侧空出一大片（1920 下曾空 880px）
+  const fill = await page.evaluate(() => {
+    const pane = document.querySelector('.adm-pane');
+    const detail = document.querySelector('.adm-detail');
+    const cs = getComputedStyle(detail);
+    const pad = parseFloat(cs.paddingRight) + parseFloat(cs.paddingLeft);
+    const fields = document.querySelector('.adm-fields');
+    const rows = [...document.querySelectorAll('.adm-fields > .adm-fv')];
+    const full = rows.find((r) => r.classList.contains('adm-fv--full'));
+    const short = rows.find((r) => !r.classList.contains('adm-fv--full'));
+    return {
+      rightGap: Math.round(pane.getBoundingClientRect().width - detail.getBoundingClientRect().width),
+      maxWidth: cs.maxWidth,
+      cols: getComputedStyle(fields).gridTemplateColumns.split(' ').length,
+      fullSpans: full ? Math.round(full.getBoundingClientRect().width) : -1,
+      // 用 clientWidth：.adm-pane 有 scrollbar-gutter: stable，会预留约 10px
+      contentW: Math.round(pane.clientWidth - pad),
+      shortW: short ? Math.round(short.getBoundingClientRect().width) : -1,
+    };
+  });
+  check('详情列无 max-width 上限', 'none', fill.maxWidth);
+  check('详情列铺满右栏（右侧无大片空白）', true, fill.rightGap <= 40);
+  check('字段区两列', 2, fill.cols);
+  check('多行字段横跨两列', true, fill.fullSpans >= fill.contentW - 2);
+  check('短字段只占一列（不被拉成长条）', true, fill.shortW < fill.contentW * 0.6);
   await shot('04-editor-edit-dark');
 
   await clickDock('分屏');
@@ -127,12 +153,13 @@ function check(name, expected, actual) {
   });
   check('分屏态：容器已滚到正文区', true, splitView.paneScrollTop > 100);
   check('分屏态：正文顶部在视野内', true, splitView.taTop > 0 && splitView.taTop < splitView.winH * 0.6);
-  // 分屏/预览要放宽详情列，否则两栏各自都太窄
+  // 分屏/编辑都铺满右栏；只有预览锁 --content-w 居中（预览要跟站点正文同宽）
   const wideW = await page.evaluate(() => {
     const el = document.querySelector('.adm-detail');
-    return el ? Math.round(el.getBoundingClientRect().width) : -1;
+    const pane = document.querySelector('.adm-pane');
+    return el ? Math.round(pane.getBoundingClientRect().width - el.getBoundingClientRect().width) : -1;
   });
-  check('分屏态详情列放宽', true, wideW > 720);
+  check('分屏态详情列同样铺满', true, wideW <= 40);
   await shot('05-editor-split-dark');
 
   await clickDock('预览');
@@ -142,6 +169,14 @@ function check(name, expected, actual) {
     '0/1',
     `${await page.locator('.adm-pane-input').count()}/${await page.locator('.adm-preview').count()}`,
   );
+  const previewW = await page.evaluate(() => {
+    const el = document.querySelector('.adm-detail');
+    const cs = getComputedStyle(el);
+    const r = el.getBoundingClientRect();
+    return { maxWidth: cs.maxWidth, left: Math.round(r.left), right: Math.round(window.innerWidth - r.right) };
+  });
+  check('预览态锁站点正文宽度', '1080px', previewW.maxWidth);
+  check('预览态居中（左右留白对称）', true, Math.abs(previewW.left - previewW.right) <= 340);
   await shot('06-editor-preview-dark');
 
   console.log('\n── 4. 真实保存落库 ─────────────────────────');
@@ -216,10 +251,21 @@ function check(name, expected, actual) {
       railW: rail ? Math.round(rail.getBoundingClientRect().width) : -1,
       railH: rail ? Math.round(rail.getBoundingClientRect().height) : -1,
       paneH: pane ? Math.round(pane.getBoundingClientRect().height) : -1,
+      fieldCols: document.querySelector('.adm-fields')
+        ? getComputedStyle(document.querySelector('.adm-fields')).gridTemplateColumns.split(' ').length
+        : -1,
+      dockCenter: (() => {
+        const d = document.querySelector('.adm-dock');
+        if (!d) return -1;
+        const r = d.getBoundingClientRect();
+        return Math.round(r.left + r.width / 2 - window.innerWidth / 2);
+      })(),
     };
   });
   check('窄屏索引条横向铺满', true, narrow.railW > 700);
   check('窄屏索引条不压满屏（详情仍有空间）', true, narrow.paneH > 300);
+  check('窄屏字段回落单列', 1, narrow.fieldCols);
+  check('窄屏工具条回到视口居中', true, Math.abs(narrow.dockCenter) <= 4);
   await shot('14-narrow-light');
   await page.setViewportSize({ width: 1440, height: 900 });
 

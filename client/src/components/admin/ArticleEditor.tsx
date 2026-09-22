@@ -4,8 +4,9 @@
 // 整页不滚，滚动由 .adm-pane 容器承担；正文 textarea 自动增高，
 // 保证面板内只有一根滚动条 —— 内容长短变化时不会出现滚动条伸缩导致的横向抖动。
 //
-// 宽度策略：默认 720px（与站点文章详情同一阅读档位）；分屏/预览切到 --content-w，
-// 因为分屏两栏各自需要宽度，预览则要与站点正文同宽才有参考价值。
+// 宽度策略：详情列铺满右栏（表单不该受阅读宽度约束，卡 720px 在宽屏下右侧空 880px）；
+// 字段区两列网格，多行字段横跨两列。只有「预览」锁 --content-w 居中 ——
+// 预览的意义就是「所见即线上」，宽度不跟站点一致就没有参考价值。
 //
 // 模式切换（编辑 / 分屏 / 预览）放在**浮动 dock** 里而不是面板顶部，
 // 因为它属于「写作时的手部动作」，贴着视线下方比回到顶部找按钮顺手。
@@ -110,7 +111,7 @@ export function ArticleEditor(props: {
   );
 
   return (
-    <div className={['adm-detail', mode === 'edit' ? '' : 'adm-detail--wide'].filter(Boolean).join(' ')}>
+    <div className={['adm-detail', mode === 'preview' ? 'adm-detail--measure' : ''].filter(Boolean).join(' ')}>
       <Kicker num="06" label="MANAGE" />
 
       <TextInput value={title} big onChange={(next) => update('title', next)} placeholder="文章标题" />

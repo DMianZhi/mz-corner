@@ -18,6 +18,8 @@ function readLocalEnv(key) {
 const staticHost = process.env.SMOKE_BASE || readLocalEnv('UNICLOUD_STATIC_HOST');
 if (!staticHost) throw new Error('缺少站点地址：请在根目录 .env 配置 UNICLOUD_STATIC_HOST，或设置 SMOKE_BASE');
 const SITE = `${staticHost.replace(/\/$/, '')}/index.html#/admin`;
+// 默认 1920：与用户真实窗口一致，宽屏铺满的回归才能验到
+const VIEWPORT = { width: Number(process.env.SMOKE_W || 1920), height: Number(process.env.SMOKE_H || 1080) };
 const PW = process.env.ADMIN_PASSWORD;
 if (!PW) throw new Error('缺少 ADMIN_PASSWORD 环境变量');
 const OUT = 'C:/Users/admin/data/work/blog/mz-corner/.wpscomate/live-shots';
@@ -37,7 +39,7 @@ const check = (name, expected, actual) => {
 
 (async () => {
   const browser = await chromium.launch();
-  const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
+  const page = await (await browser.newContext({ viewport: VIEWPORT })).newPage();
   const consoleErrors = [];
   page.on('console', (m) => {
     if (m.type() === 'error') consoleErrors.push(m.text());
@@ -84,6 +86,60 @@ const check = (name, expected, actual) => {
   await page.waitForSelector('.adm-preview', { timeout: 20000 });
   check('分屏预览可用', 1, await page.locator('.adm-pane-input').count());
   await page.screenshot({ path: `${OUT}/live-editor-split-dark.png` });
+
+  // 1920 是用户的真实窗口宽度：详情列必须铺满右栏，短字段成对而不是拉成长条。
+  console.log('\n── 线上 1920 宽屏铺满 ──────────────────────');
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.click('.adm-dock .adm-dock-btn:has-text("编辑")');
+  await page.waitForSelector('.adm-fields', { timeout: 20000 });
+  await page.waitForTimeout(600);
+  const wide = await page.evaluate(() => {
+    const pane = document.querySelector('.adm-pane');
+    const detail = document.querySelector('.adm-detail');
+    const fields = document.querySelector('.adm-fields');
+    if (!pane || !detail || !fields) return null;
+    const cols = getComputedStyle(fields).gridTemplateColumns.split(' ').map((v) => parseFloat(v));
+    const fieldsW = fields.getBoundingClientRect().width;
+    const rows = [...fields.children].map((el) => ({
+      w: el.getBoundingClientRect().width,
+      full: el.classList.contains('adm-fv--full'),
+    }));
+    return {
+      rightGap: Math.round(pane.getBoundingClientRect().width - detail.getBoundingClientRect().width),
+      colCount: cols.length,
+      colsEven: cols.length === 2 && Math.abs(cols[0] - cols[1]) < 2,
+      fullRows: rows.filter((r) => r.full).length,
+      fullSpans: rows.filter((r) => r.full).every((r) => Math.abs(r.w - fieldsW) < 2),
+      shortRows: rows.filter((r) => !r.full).length,
+      shortHalf: rows.filter((r) => !r.full).every((r) => r.w < fieldsW * 0.55),
+    };
+  });
+  check('1920：详情列铺满右栏（右侧空隙 ≤ 24px）', true, !!wide && wide.rightGap <= 24);
+  check('1920：字段区两列等宽', true, !!wide && wide.colsEven);
+  // 正文编辑区不在 .adm-fields 里（单独一段），这里只要求元信息区的多行字段横跨两列
+  check('1920：摘要等长文本横跨两列', true, !!wide && wide.fullRows >= 1 && wide.fullSpans);
+  check('1920：短字段成对、不被拉成长条', true, !!wide && wide.shortRows >= 4 && wide.shortHalf);
+  await page.screenshot({ path: `${OUT}/live-1920-fill-dark.png` });
+
+  // 预览是「站点正文的还原」，铺满不能把这条也带跑偏。
+  await page.click('.adm-dock .adm-dock-btn:has-text("预览")');
+  await page.waitForSelector('.adm-preview', { timeout: 20000 });
+  await page.waitForTimeout(500);
+  const pv = await page.evaluate(() => {
+    // 锁宽落在 .adm-detail 上（.adm-preview 本身是铺满的容器）
+    const el = document.querySelector('.adm-detail');
+    const pane = document.querySelector('.adm-pane');
+    const r = el.getBoundingClientRect();
+    const pr = pane.getBoundingClientRect();
+    return {
+      max: getComputedStyle(el).maxWidth,
+      // 公差 12：详情栏预留了 scrollbar-gutter（10px）
+      centered: Math.abs((r.left - pr.left) - (pr.right - r.right)) <= 12,
+    };
+  });
+  check('1920：预览仍锁站点正文宽 1080', '1080px', pv.max);
+  check('1920：预览在详情栏内居中', true, pv.centered);
+  await page.click('.adm-dock .adm-dock-btn:has-text("编辑")');
 
   console.log('\n── 线上：其余三个面板 ──────────────────────');
   for (const [label, file] of [

@@ -465,7 +465,8 @@ html.light .adm-shell {
   min-height: 0;
   display: grid;
   /* 320px：demo 里 296px 在 1440 宽下会把「从踩坑记录到知识库…」这类标题截断 */
-  grid-template-columns: 320px minmax(0, 1fr);
+  --rail-w: 320px;
+  grid-template-columns: var(--rail-w) minmax(0, 1fr);
 }
 
 .adm-rail {
@@ -571,14 +572,33 @@ html.light .adm-shell {
   scrollbar-gutter: stable;
 }
 .adm-detail {
-  /* 与站点文章详情同一阅读宽度档位：正文列过宽会让人找不到下一行开头 */
-  max-width: 720px;
+  /* 铺满右栏，不设 max-width：表单不像正文那样受阅读宽度约束，
+     卡 720px 在 1920 宽下右侧会空出 880px（实测）。阅读宽度只保留给预览，
+     见 .adm-detail--measure —— 预览的意义就是「所见即线上」。 */
   padding: 44px 48px 132px;
   box-sizing: border-box;
 }
-/* 分屏 / 预览需要更宽的舞台：分屏两栏各自才够宽，预览要与站点正文同宽 */
-.adm-detail--wide {
+/* 预览：与站点正文同宽并居中，保证所见即线上 */
+.adm-detail--measure {
   max-width: var(--content-w);
+  margin-inline: auto;
+}
+
+/* 字段区两列网格：铺满右栏后单列会把「分类」这类短字段拉成一条 1300px 的长条。
+   多行字段（.adm-fv--full）横跨两列，短字段两两成对。 */
+.adm-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 40px;
+}
+.adm-fields > .adm-fv--full {
+  grid-column: 1 / -1;
+}
+@media (max-width: 1280px) {
+  /* 再窄下去单列控件只剩 200 多 px，不如回到一列 */
+  .adm-fields {
+    grid-template-columns: 1fr;
+  }
 }
 
 .adm-dmeta {
@@ -632,7 +652,8 @@ html.light .adm-shell {
 
 .adm-dock {
   position: fixed;
-  left: 50%;
+  /* 对齐右栏中心而不是视口中心：左栏 320px 常驻，按 50% 居中会整体偏左 160px */
+  left: calc(50% + var(--rail-w, 0px) / 2);
   bottom: 24px;
   transform: translateX(-50%);
   z-index: 40;
@@ -822,6 +843,8 @@ html.light .adm-shell {
        会先按内容定高、超过 38% 才压缩 */
     display: flex;
     flex-direction: column;
+    /* 索引条已挪到上方，工具条回到视口居中 */
+    --rail-w: 0px;
   }
   .adm-rail {
     /* shrink 必须为 0：右侧详情内容很长，若两者都可缩，

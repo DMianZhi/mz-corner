@@ -445,7 +445,7 @@ export function FieldRow(props: {
   children: ReactNode;
 }) {
   return (
-    <div className={['adm-fv', props.top ? 'adm-fv--top' : ''].filter(Boolean).join(' ')}>
+    <div className={['adm-fv', props.top ? 'adm-fv--top adm-fv--full' : ''].filter(Boolean).join(' ')}>
       <span className="adm-fv-k">
         {props.label}
         {props.required ? <span className="adm-req"> *</span> : null}

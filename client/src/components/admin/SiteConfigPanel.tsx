@@ -111,33 +111,35 @@ export function SiteConfigPanel(props: {
               <hr className="adm-divider" style={{ flex: 1 }} />
             </div>
 
-            <FieldRow label="值" top={LONG_KEYS.has(fieldOf(selected, 'key'))}>
-              {LONG_KEYS.has(fieldOf(selected, 'key')) ? (
-                <TextArea
-                  value={fieldOf(selected, 'value')}
-                  rows={3}
-                  onChange={(next) => setField(selected, 'value', next)}
-                />
-              ) : (
+            <div className="adm-fields">
+              <FieldRow label="值" top={LONG_KEYS.has(fieldOf(selected, 'key'))}>
+                {LONG_KEYS.has(fieldOf(selected, 'key')) ? (
+                  <TextArea
+                    value={fieldOf(selected, 'value')}
+                    rows={3}
+                    onChange={(next) => setField(selected, 'value', next)}
+                  />
+                ) : (
+                  <TextInput
+                    value={fieldOf(selected, 'value')}
+                    onChange={(next) => setField(selected, 'value', next)}
+                  />
+                )}
+              </FieldRow>
+              <FieldRow label="键名">
                 <TextInput
-                  value={fieldOf(selected, 'value')}
-                  onChange={(next) => setField(selected, 'value', next)}
+                  value={fieldOf(selected, 'key')}
+                  monospace
+                  onChange={(next) => setField(selected, 'key', next)}
                 />
-              )}
-            </FieldRow>
-            <FieldRow label="键名">
-              <TextInput
-                value={fieldOf(selected, 'key')}
-                monospace
-                onChange={(next) => setField(selected, 'key', next)}
-              />
-            </FieldRow>
-            <FieldRow label="分组">
-              <TextInput
-                value={fieldOf(selected, 'group')}
-                onChange={(next) => setField(selected, 'group', next)}
-              />
-            </FieldRow>
+              </FieldRow>
+              <FieldRow label="分组">
+                <TextInput
+                  value={fieldOf(selected, 'group')}
+                  onChange={(next) => setField(selected, 'group', next)}
+                />
+              </FieldRow>
+            </div>
 
             <FieldValue label="ID">
               <span className="font-mono-site" style={{ fontSize: 12.5, color: 'var(--text-3)' }}>
