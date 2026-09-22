@@ -45,6 +45,7 @@ thumbnail.png
 
 # uniCloud 云函数构建产物（pnpm run build:unicloud 生成）
 deploy/unicloud/cloudfunctions/*/nitro/
+deploy/unicloud/cloudfunctions/*/public/
 # 注意：必须锚定根目录（/uniCloud-*/），否则在大小写不敏感的文件系统（Windows）上
 # 会误伤 server/data/providers/unicloud-db/ —— 曾导致数据层 7 个文件从未入库
 /uniCloud-*/
