@@ -1,4 +1,8 @@
-/* 管理后台专用样式。
+/* 管理后台专用样式（方案 B：主编工作台）。
+ *
+ * 布局模型（与 demo/admin-B-workbench.html 同构）：
+ *   shell（视口高，整页不滚）→ topbar（下划线标签）→ workbench（左索引 + 右详情）
+ *   滚动只发生在 .adm-rail-list 与 .adm-pane 两个容器内。
  *
  * 颜色 / 圆角 / 字体 / 动效一律引用 global.css 的「暗室色标」令牌，
  * 因此明暗主题跟随 `html.light` 自动切换 —— 本文件**不做任何主题分支判断**，
@@ -8,6 +12,8 @@
  * 与站点前台互不干扰；global.css 是设计系统本身，不该混入后台业务样式。
  */
 
+/* ── 外壳 ─────────────────────────────────────────────── */
+
 /* 让原生控件（下拉列表、滚动条、日期选择器）跟随主题 */
 .adm-shell {
   color-scheme: dark;
@@ -15,15 +21,14 @@
   color: var(--text-1);
   /* 站点 Nav 是 position:fixed，不占文档流，各页面都得自己让出 nav 高度
      （见 pages/*.tsx 的 `paddingTop: calc(var(--nav-h) + 48px)` 约定）。
-     管理页统一由 shell 让位：否则吸附的 .adm-topbar（top: var(--nav-h)）会顶到
-     nav 下面，而页面内容仍从 y=0 起算，编辑器头部整排被压住——返回/保存都点不到。 */
+     管理页统一由 shell 让位，否则 topbar 会顶到 nav 下面。 */
   padding-top: var(--nav-h);
   /* 滚动条 thumb 专用色：--border-strong 只有 0.16 透明度，做发丝分割线合适，
      做滚动条在近黑底上几乎看不见，故单独定义并随主题切换。 */
   --adm-scrollbar-thumb: rgba(255, 255, 255, 0.26);
   --adm-scrollbar-thumb-hover: rgba(255, 255, 255, 0.42);
-  /* 视口内固定高度：整页不再随内容长短出现/消失滚动条（Windows 上那会让
-     固定 Nav 与页面内容一起横向抖动）。滚动交给 .adm-page 在容器内完成。
+  /* 视口内固定高度：整页不随内容长短出现/消失滚动条（Windows 上那会让
+     固定 Nav 与页面内容一起横向抖动）。滚动交给 rail-list / pane 在容器内完成。
      box-sizing 显式声明，不依赖 Tailwind preflight 是否在场。 */
   height: 100dvh;
   display: flex;
@@ -40,15 +45,15 @@ html.light .adm-shell {
 /* ── 顶栏 ─────────────────────────────────────────────── */
 
 .adm-topbar {
-  /* 不再是 sticky：shell 已是固定高度 flex 列，topbar 位于滚动容器之外，
-     天然不随内容滚动，也不需要 top 偏移。 */
+  /* 不在滚动容器内，天然不随内容滚动，也不需要 top 偏移 */
   position: relative;
   flex-shrink: 0;
   z-index: 30;
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 12px var(--gutter);
+  gap: 24px;
+  height: 52px;
+  padding: 0 var(--gutter);
   background: var(--bg-nav-scrolled);
   backdrop-filter: blur(20px) saturate(180%);
   -webkit-backdrop-filter: blur(20px) saturate(180%);
@@ -62,71 +67,97 @@ html.light .adm-shell {
   flex-shrink: 0;
 }
 .adm-brand-mark {
-  width: 26px;
-  height: 26px;
-  border-radius: 8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
   display: grid;
   place-items: center;
   background: var(--brand);
   color: var(--brand-ink);
 }
 .adm-brand-text {
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  color: var(--text-1);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-2);
 }
 
-/* ── 分段标签 ─────────────────────────────────────────── */
+/* ── 标签（下划线式，非胶囊分段）────────────────────────
+   站点自己的导航语言是「下划线 tab + 等宽大写」；胶囊分段是组件库语言，
+   放在这里会立刻显出「后台是另一个 App」。 */
 
 .adm-tabs {
-  display: inline-flex;
-  gap: 2px;
-  padding: 3px;
-  border-radius: 11px;
-  background: var(--bg-raised);
-  border: 1px solid var(--border-soft);
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  min-width: 0;
 }
 .adm-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 14px;
+  position: relative;
+  padding: 4px 0;
   border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-2);
-  font: 500 13px/1 var(--font-sans);
-  cursor: pointer;
+  background: none;
+  color: var(--text-3);
+  font: 400 11.5px/1 var(--font-mono);
+  letter-spacing: 0.1em;
   white-space: nowrap;
-  transition:
-    color var(--dur-fast) var(--ease-standard),
-    background var(--dur-fast) var(--ease-standard);
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-standard);
 }
 .adm-tab:hover {
-  color: var(--text-1);
-  background: var(--bg-hover);
+  color: var(--text-2);
 }
 .adm-tab[aria-selected='true'] {
+  color: var(--text-1);
+}
+.adm-tab[aria-selected='true']::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -2px;
+  height: 1.5px;
   background: var(--brand);
-  color: var(--brand-ink);
-  font-weight: 600;
 }
 .adm-tab:focus-visible {
   outline: 2px solid var(--brand);
-  outline-offset: 2px;
+  outline-offset: 3px;
+  border-radius: 3px;
 }
 .adm-tab-count {
-  padding: 2px 5px;
-  border-radius: 5px;
-  background: var(--bg-hover);
+  font-style: normal;
+  margin-left: 5px;
+  font-size: 10.5px;
   color: var(--text-3);
-  font: 500 11px/1.4 var(--font-mono);
 }
-.adm-tab[aria-selected='true'] .adm-tab-count {
-  background: var(--brand-ink);
+
+/* 顶栏 / 索引栏里的文字链接（导出、退出、新建） */
+.adm-link {
+  border: 0;
+  background: none;
+  padding: 4px 0;
+  color: var(--text-3);
+  font: 400 11px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-standard);
+}
+.adm-link:hover:not(:disabled) {
+  color: var(--text-1);
+}
+.adm-link:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.adm-link--brand {
   color: var(--brand);
-  opacity: 0.72;
+}
+.adm-link:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+  border-radius: 3px;
 }
 
 /* ── 按钮 ─────────────────────────────────────────────── */
@@ -166,16 +197,21 @@ html.light .adm-shell {
   cursor: not-allowed;
 }
 
+/* 主按钮改用「等宽小写字 + 胶囊」，与站点 .act 同一语言 */
 .adm-btn--primary {
+  padding: 8px 15px;
+  border-radius: 999px;
+  border-color: transparent;
   background: var(--brand);
   color: var(--brand-ink);
-  border-color: transparent;
-  font-weight: 600;
+  font: 500 11px/1.4 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 .adm-btn--primary:hover:not(:disabled) {
   background: var(--brand);
   border-color: transparent;
-  filter: brightness(1.08);
+  filter: brightness(1.06);
 }
 .adm-btn--quiet {
   background: transparent;
@@ -197,9 +233,14 @@ html.light .adm-shell {
   border-color: var(--danger);
 }
 .adm-btn--sm {
-  padding: 6px 10px;
+  padding: 6px 11px;
   font-size: 12.5px;
   border-radius: 8px;
+}
+.adm-btn--sm.adm-btn--primary {
+  padding: 7px 13px;
+  border-radius: 999px;
+  font-size: 10.5px;
 }
 .adm-btn--icon {
   padding: 8px;
@@ -210,22 +251,6 @@ html.light .adm-shell {
 
 /* ── 表单 ─────────────────────────────────────────────── */
 
-.adm-field {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  min-width: 0;
-}
-.adm-field-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--text-3);
-}
 .adm-req {
   color: var(--brand);
   font-size: 12px;
@@ -277,18 +302,33 @@ html.light .adm-shell {
   font-family: var(--font-mono);
   font-size: 12.5px;
 }
+/* 详情页主标题：与站点 h2 同一字号/字重/字距，输入态只靠一条底线提示 */
 .adm-input--title {
-  padding: 12px 14px;
-  font-size: 22px;
-  font-weight: 600;
+  padding: 10px 0;
+  background: transparent;
+  border-color: transparent;
+  border-bottom-color: var(--border-soft);
+  border-radius: 0;
+  font-size: clamp(24px, 2.4vw, 30px);
+  font-weight: 700;
   letter-spacing: -0.02em;
+  line-height: 1.22;
+}
+.adm-input--title:hover {
+  border-color: transparent;
+  border-bottom-color: var(--border-strong);
+}
+.adm-input--title:focus {
+  border-color: transparent;
+  border-bottom-color: var(--brand);
+  box-shadow: none;
 }
 .adm-textarea {
   resize: vertical;
   min-height: 84px;
 }
 .adm-textarea--code {
-  min-height: 58vh;
+  min-height: 46vh;
   resize: none;
   font-family: var(--font-mono);
   font-size: 13px;
@@ -378,55 +418,7 @@ html.light .adm-shell {
   color: var(--text-1);
 }
 
-/* ── 列表行 ───────────────────────────────────────────── */
-
-.adm-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  width: 100%;
-  padding: 14px 16px;
-  border: 1px solid var(--border-soft);
-  border-radius: calc(var(--radius) - 2px);
-  background: var(--bg-card);
-  color: var(--text-1);
-  text-align: left;
-  font-family: inherit;
-  cursor: pointer;
-  transition:
-    background var(--dur-fast) var(--ease-standard),
-    border-color var(--dur-fast) var(--ease-standard);
-}
-.adm-row:hover {
-  background: var(--bg-hover);
-  border-color: var(--border-strong);
-}
-.adm-row[aria-current='true'] {
-  background: var(--brand-dim);
-  border-color: var(--brand);
-}
-.adm-row:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: 2px;
-}
-.adm-row-title {
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.adm-row-meta {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-  font: 400 11.5px/1 var(--font-mono);
-  color: var(--text-3);
-}
-
-/* ── 徽标 ─────────────────────────────────────────────── */
+/* ── 徽标 / 卡片 ──────────────────────────────────────── */
 
 .adm-badge {
   display: inline-flex;
@@ -454,8 +446,6 @@ html.light .adm-shell {
   color: var(--text-3);
 }
 
-/* ── 卡片 / 容器 ──────────────────────────────────────── */
-
 .adm-card {
   background: var(--bg-card);
   border: 1px solid var(--border-soft);
@@ -468,7 +458,177 @@ html.light .adm-shell {
   margin: 0;
 }
 
-/* ── 编辑页：浮动工具条 ───────────────────────────────── */
+/* ── 工作台骨架（左索引 + 右详情）──────────────────────── */
+
+.adm-workbench {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  /* 320px：demo 里 296px 在 1440 宽下会把「从踩坑记录到知识库…」这类标题截断 */
+  grid-template-columns: 320px minmax(0, 1fr);
+}
+
+.adm-rail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--border-soft);
+}
+.adm-rail-head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 17px 20px 11px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.adm-rail-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.adm-rail-count {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  color: var(--text-3);
+}
+.adm-rail-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 6px 0 28px;
+  scrollbar-gutter: stable;
+}
+
+.adm-ritem {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) 8px;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  padding: 10px 18px;
+  border: 0;
+  border-left: 2px solid transparent;
+  background: none;
+  color: inherit;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-standard);
+}
+.adm-ritem:hover {
+  background: var(--bg-hover);
+}
+.adm-ritem[aria-current='true'] {
+  background: var(--bg-hover);
+  border-left-color: var(--brand);
+}
+.adm-ritem:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+.adm-ritem-n {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-3);
+}
+.adm-ritem-t {
+  font-size: 13.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.adm-ritem[aria-current='true'] .adm-ritem-t {
+  font-weight: 600;
+}
+.adm-ritem-d {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--brand);
+  justify-self: end;
+}
+/* 未启用（草稿 / 未设置 / 归档）：空心点 */
+.adm-ritem-d--off {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--text-3);
+}
+/* 需要注意（维护中 / 待处理）：实心点 + 文字跟着变色 */
+.adm-ritem--warn .adm-ritem-t {
+  color: var(--brand);
+}
+
+/* ── 右侧详情 / 编辑器 ────────────────────────────────── */
+
+.adm-pane {
+  min-height: 0;
+  min-width: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+}
+.adm-detail {
+  /* 与站点文章详情同一阅读宽度档位：正文列过宽会让人找不到下一行开头 */
+  max-width: 720px;
+  padding: 44px 48px 132px;
+  box-sizing: border-box;
+}
+/* 分屏 / 预览需要更宽的舞台：分屏两栏各自才够宽，预览要与站点正文同宽 */
+.adm-detail--wide {
+  max-width: var(--content-w);
+}
+
+.adm-dmeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin-top: 12px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+/* 字段行：左侧等宽标签 + 右侧控件，用发丝线分隔（替代卡片网格） */
+.adm-fv {
+  display: grid;
+  grid-template-columns: 118px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border-soft);
+}
+.adm-fv--top {
+  align-items: start;
+}
+.adm-fv-k {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  color: var(--text-3);
+}
+.adm-fv-v {
+  min-width: 0;
+  font-size: 14px;
+}
+
+/* 小节标题：等宽小标签 + 右侧发丝线收口 */
+.adm-sec {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 26px 0 4px;
+}
+.adm-sec-note {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+/* ── 浮动工具条（编辑 / 分屏 / 预览 / 保存）────────────── */
 
 .adm-dock {
   position: fixed;
@@ -487,79 +647,52 @@ html.light .adm-shell {
   border: 1px solid var(--border-strong);
   box-shadow: 0 20px 44px -20px rgba(0, 0, 0, 0.62);
 }
+.adm-dock-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-2);
+  font: 500 12.5px/1 var(--font-sans);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    color var(--dur-fast) var(--ease-standard),
+    background var(--dur-fast) var(--ease-standard);
+}
+.adm-dock-btn:hover {
+  color: var(--text-1);
+  background: var(--bg-hover);
+}
+.adm-dock-btn[aria-selected='true'] {
+  background: var(--brand);
+  color: var(--brand-ink);
+  font-weight: 600;
+}
+.adm-dock-btn:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
 .adm-dock-sep {
   width: 1px;
   height: 20px;
   margin: 0 3px;
   background: var(--border-soft);
 }
-/* 内容区底部留白：浮动工具条会遮住最后几行（demo 阶段发现的问题） */
-.adm-editor-body {
-  padding-bottom: 132px;
-}
-
-/* ── 页面容器与主从布局 ───────────────────────────────── */
-
-.adm-page {
-  padding: 24px var(--gutter) 88px;
-  /* 唯一的滚动容器：flex:1 吃掉 shell 剩余高度，min-height:0 才允许它
-     收缩到小于内容高度（否则 flex 子项不会滚动）。 */
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  /* 始终预留滚动条槽位：内容长短变化时不再横向位移，这是「抖动」的真正来源 */
-  scrollbar-gutter: stable;
-}
-.adm-masterdetail {
-  display: grid;
-  grid-template-columns: minmax(240px, 330px) 1fr;
-  gap: 18px;
-  align-items: start;
-}
-@media (max-width: 860px) {
-  .adm-masterdetail {
-    grid-template-columns: 1fr;
-  }
-}
-.adm-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.adm-col-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding-bottom: 4px;
-}
-.adm-sticky-bar {
-  position: sticky;
-  bottom: 20px;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 20px;
-  padding: 12px 16px;
-  border-radius: 13px;
-  background: color-mix(in srgb, var(--bg-card) 90%, transparent);
-  backdrop-filter: blur(18px) saturate(180%);
-  -webkit-backdrop-filter: blur(18px) saturate(180%);
-  border: 1px solid var(--border-strong);
-  box-shadow: 0 18px 40px -22px rgba(0, 0, 0, 0.6);
-}
 
 /* ── 分屏 ─────────────────────────────────────────────── */
 
-/* 分屏/全屏编辑时，文本域自身不再需要边框与圆角（外框已由 .adm-split 提供） */
+/* 分屏时文本域自身不再需要边框与圆角（外框已由 .adm-split 提供） */
 .adm-pane-input {
   border: 0;
   border-radius: 0;
   background: transparent;
-  min-height: 58vh;
+  min-height: 52vh;
   resize: none;
-  padding: 22px 24px;
+  padding: 20px 22px;
 }
 .adm-pane-input:hover,
 .adm-pane-input:focus {
@@ -580,13 +713,32 @@ html.light .adm-shell {
   min-width: 0;
 }
 .adm-preview {
-  padding: 28px 32px;
+  padding: 26px 30px;
   overflow-wrap: anywhere;
 }
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .adm-split {
     grid-template-columns: 1fr;
   }
+}
+
+/* ── 贴底保存条（站点设置）────────────────────────────── */
+
+.adm-sticky-bar {
+  position: sticky;
+  bottom: 20px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+  padding: 10px 14px;
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--bg-card) 90%, transparent);
+  backdrop-filter: blur(18px) saturate(180%);
+  -webkit-backdrop-filter: blur(18px) saturate(180%);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 18px 40px -22px rgba(0, 0, 0, 0.6);
 }
 
 /* ── 空态 / 加载 ──────────────────────────────────────── */
@@ -596,7 +748,7 @@ html.light .adm-shell {
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  padding: 72px 24px;
+  padding: 64px 24px;
   text-align: center;
   color: var(--text-3);
 }
@@ -640,23 +792,55 @@ html.light .adm-shell {
 
 /* ── 滚动条（细条）────────────────────────────────────── */
 
-/* 统一作用到后台的滚动容器。:where() 保持零特异性，便于局部覆盖；
+/* 统一作用到后台的两个滚动容器。:where() 保持零特异性，便于局部覆盖；
    同时给 Firefox 的 scrollbar-width/color（::-webkit-* 对它无效）。 */
-:where(.adm-scroll, .adm-page) {
+:where(.adm-scroll, .adm-rail-list, .adm-pane) {
   scrollbar-width: thin;
   scrollbar-color: var(--adm-scrollbar-thumb) transparent;
 }
-:where(.adm-scroll, .adm-page)::-webkit-scrollbar {
+:where(.adm-scroll, .adm-rail-list, .adm-pane)::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
-:where(.adm-scroll, .adm-page)::-webkit-scrollbar-track {
+:where(.adm-scroll, .adm-rail-list, .adm-pane)::-webkit-scrollbar-track {
   background: transparent;
 }
-:where(.adm-scroll, .adm-page)::-webkit-scrollbar-thumb {
+:where(.adm-scroll, .adm-rail-list, .adm-pane)::-webkit-scrollbar-thumb {
   background: var(--adm-scrollbar-thumb);
   border-radius: 999px;
 }
-:where(.adm-scroll, .adm-page)::-webkit-scrollbar-thumb:hover {
+:where(.adm-scroll, .adm-rail-list, .adm-pane)::-webkit-scrollbar-thumb:hover {
   background: var(--adm-scrollbar-thumb-hover);
+}
+
+/* ── 窄屏降级：索引条挪到上方 ─────────────────────────── */
+
+@media (max-width: 900px) {
+  .adm-workbench {
+    /* 用 flex 而不是 grid 行：grid 的 minmax(auto, 38%) 会把行撑到 38% 上限，
+       条目只有两三条时索引条下方就空出一大片；flex 的 flex:0 1 auto
+       会先按内容定高、超过 38% 才压缩 */
+    display: flex;
+    flex-direction: column;
+  }
+  .adm-rail {
+    /* shrink 必须为 0：右侧详情内容很长，若两者都可缩，
+       索引条会被按比例挤矮（实测 158px 被压到 112px），下面几行就看不见了 */
+    flex: 0 0 auto;
+    max-height: 38%;
+    border-right: 0;
+    border-bottom: 1px solid var(--border-soft);
+  }
+  .adm-pane {
+    /* basis 0 而不是 auto：auto 会把详情内容高度算进基准，
+       再回头去挤索引条 */
+    flex: 1 1 0;
+    min-height: 0;
+  }
+  .adm-detail {
+    padding: 26px 22px 120px;
+  }
+  .adm-fv {
+    grid-template-columns: 96px minmax(0, 1fr);
+  }
 }

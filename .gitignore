@@ -42,6 +42,9 @@ memory/
 .wpscomate/
 thumbnail.png
 .subagents/
+# 管理后台改版 demo（脚本 scripts/build-admin-demos.mjs 生成，内嵌真实文章标题，
+# 只作本地评审用；要看效果直接重跑脚本，不入库）
+/demo/
 
 # uniCloud 云函数构建产物（pnpm run build:unicloud 生成）
 deploy/unicloud/cloudfunctions/*/nitro/

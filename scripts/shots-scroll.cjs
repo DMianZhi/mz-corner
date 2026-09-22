@@ -18,12 +18,12 @@ const LONG = ['## 一、Actions', '', '这是一段用于撑高编辑器的正�
   await page.waitForSelector('input[placeholder="管理口令"]', { timeout: 20000 });
   await page.fill('input[placeholder="管理口令"]', PW);
   await page.press('input[placeholder="管理口令"]', 'Enter');
-  await page.waitForSelector('.adm-row', { timeout: 20000 });
+  await page.waitForSelector('.adm-ritem', { timeout: 20000 });
   await page.waitForTimeout(600);
 
   // 注入长内容，让容器真正溢出（本地假库仅 3 篇，否则没有滚动条可看）
   await page.evaluate(() => {
-    const el = document.querySelector('.adm-page');
+    const el = document.querySelector('.adm-pane');
     const spacer = document.createElement('div');
     spacer.id = 'visual-spacer';
     spacer.style.height = '1400px';
@@ -37,7 +37,7 @@ const LONG = ['## 一、Actions', '', '这是一段用于撑高编辑器的正�
 
   // 编辑器分屏
   await page.evaluate(() => document.getElementById('visual-spacer')?.remove());
-  await page.locator('.adm-row').first().click();
+  await page.locator('.adm-ritem').first().click();
   await page.waitForSelector('.adm-dock', { timeout: 10000 });
   await page.fill('.adm-textarea--code', LONG);
   await page.waitForTimeout(400);
@@ -49,7 +49,7 @@ const LONG = ['## 一、Actions', '', '这是一段用于撑高编辑器的正�
   // 浅色
   await page.evaluate(() => localStorage.setItem('theme', 'light'));
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('.adm-row', { timeout: 20000 });
+  await page.waitForSelector('.adm-ritem', { timeout: 20000 });
   await page.waitForTimeout(800);
   await page.screenshot({ path: OUT + '/final-list-light.png' });
 

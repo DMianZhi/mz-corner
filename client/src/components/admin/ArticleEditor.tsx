@@ -1,23 +1,24 @@
-// 文章编辑器（方案 B：全页沉浸 + 浮动工具条）。
+// 文章编辑器（方案 B 的右栏详情，不是独立页面）。
 //
-// 布局取舍：标题、元信息、正文分三层。整页不滚（滚动由 .adm-page 容器承担），
-// 正文 textarea 自动增高，保证全页只有一根滚动条 —— 内容长短变化时不会出现
-// 滚动条伸缩导致的横向抖动。
-// 模式切换（编辑 / 分屏 / 预览）放在**浮动 dock** 里而不是页头，
+// 布局取舍：kicker → 标题 → 等宽元信息行 → 字段行（发丝线分隔）→ 正文。
+// 整页不滚，滚动由 .adm-pane 容器承担；正文 textarea 自动增高，
+// 保证面板内只有一根滚动条 —— 内容长短变化时不会出现滚动条伸缩导致的横向抖动。
+//
+// 宽度策略：默认 720px（与站点文章详情同一阅读档位）；分屏/预览切到 --content-w，
+// 因为分屏两栏各自需要宽度，预览则要与站点正文同宽才有参考价值。
+//
+// 模式切换（编辑 / 分屏 / 预览）放在**浮动 dock** 里而不是面板顶部，
 // 因为它属于「写作时的手部动作」，贴着视线下方比回到顶部找按钮顺手。
 //
 // 已知坑（demo 阶段踩过）：dock 是 fixed 定位，会盖住正文最后几行 ——
-// 内容区必须留出底部内边距（.adm-editor-body 的 padding-bottom）。
+// .adm-detail 因此留了 132px 底部内边距。
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import { Markdown } from '@/components/Markdown';
-import {
-  updateContent,
-  type ContentDocument,
-  type ContentField,
-} from '@/services/admin-api';
+import { updateContent, type ContentDocument, type ContentField } from '@/services/admin-api';
 import { asText, SchemaForm } from './SchemaForm';
-import { Badge, Button, Icon, MonoLabel, TextInput } from './ui';
+import { StatusText } from './status';
+import { Badge, Button, FieldValue, Icon, Kicker, TextInput } from './ui';
 
 type EditorMode = 'edit' | 'split' | 'preview';
 
@@ -37,8 +38,8 @@ function pickValues(fields: ContentField[], document: ContentDocument): Record<s
 export function ArticleEditor(props: {
   article: ContentDocument;
   fields: ContentField[];
-  onSaved: () => void;
-  onBack: () => void;
+  onSaved: () => Promise<void> | void;
+  onAuthLost: () => void;
 }) {
   const [values, setValues] = useState<Record<string, unknown>>(() =>
     pickValues(props.fields, props.article),
@@ -65,8 +66,12 @@ export function ArticleEditor(props: {
       await updateContent('articles', props.article._id, values);
       setDirty(false);
       toast.success('已保存');
-      props.onSaved();
+      await props.onSaved();
     } catch (error) {
+      if (error instanceof Error && error.name === 'Unauthorized') {
+        props.onAuthLost();
+        return;
+      }
       toast.error(error instanceof Error ? error.message : '保存失败');
     } finally {
       setSaving(false);
@@ -77,7 +82,7 @@ export function ArticleEditor(props: {
   const title = asText(values.title);
   const content = asText(values.content);
 
-  // 正文自动增高：textarea 若自带滚动，页面就会同时存在两根滚动条，
+  // 正文自动增高：textarea 若自带滚动，面板里就会同时存在两根滚动条，
   // 且内容长短变化时互相干扰。先置 auto 再按 scrollHeight 赋值，避免只增不减。
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   useLayoutEffect(() => {
@@ -87,57 +92,64 @@ export function ArticleEditor(props: {
     el.style.height = el.scrollHeight + 'px';
   }, [content, mode]);
 
+  // 切到分屏/预览时把正文区滚到视野顶部：
+  // 详情列上方还有标题与一整组元信息字段，不滚的话「预览」按下去只看到表单，
+  // 得手动往下拖才能看到正文 —— 这是实测中第一个会让人困惑的点。
+  const bodySecRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (mode === 'edit') return;
+    bodySecRef.current?.scrollIntoView({ block: 'start' });
+  }, [mode]);
+
+  const body = content.trim() ? (
+    <Markdown source={content} />
+  ) : (
+    <span style={{ color: 'var(--text-3)', fontSize: 13 }}>
+      {mode === 'split' ? '左侧输入后，这里实时预览' : '正文为空'}
+    </span>
+  );
+
   return (
-    <div className="adm-editor-body adm-fade">
-      {/* 页头：返回 + 面包屑 + 站点预览入口 */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          padding: '4px 0 20px',
-        }}
-      >
-        <Button size="sm" variant="quiet" icon={<Icon.ArrowLeft size={14} />} onClick={props.onBack}>
-          返回列表
-        </Button>
-        <MonoLabel style={{ letterSpacing: '0.1em' }}>
-          {status === 'published' ? '已发布' : '草稿'}
-        </MonoLabel>
-        {dirty ? <Badge tone="brand">未保存</Badge> : null}
-        <span style={{ flex: 1 }} />
+    <div className={['adm-detail', mode === 'edit' ? '' : 'adm-detail--wide'].filter(Boolean).join(' ')}>
+      <Kicker num="06" label="MANAGE" />
+
+      <TextInput value={title} big onChange={(next) => update('title', next)} placeholder="文章标题" />
+
+      <div className="adm-dmeta">
+        <span>{asText(values.category) || '未分类'}</span>
+        <span>{asText(values.publishDate) || '未设日期'}</span>
+        <span>{asText(props.article.viewCount) || '0'} 次阅读</span>
+        <StatusText value={status} />
         {status === 'published' ? (
           <a
-            className="adm-btn adm-btn--sm"
+            className="adm-link"
             href={`#/post/${props.article._id}`}
             target="_blank"
             rel="noreferrer"
-            style={{ textDecoration: 'none' }}
+            style={{ color: 'var(--brand)' }}
           >
-            <Icon.ExternalLink size={14} />
             在站点查看
           </a>
         ) : null}
       </div>
 
-      {/* 标题 */}
-      <TextInput value={title} big onChange={(next) => update('title', next)} placeholder="文章标题" />
-
-      {/* 元信息 */}
-      <div style={{ marginTop: 20 }}>
-        <SchemaForm
-          fields={props.fields}
-          values={values}
-          onChange={update}
-          exclude={['title', 'content']}
-        />
+      <div className="adm-sec">
+        <span className="label-site">元信息</span>
+        <hr className="adm-divider" style={{ flex: 1 }} />
+        {dirty ? <Badge tone="brand">未保存</Badge> : null}
       </div>
 
-      {/* 正文：标题与正文之间用一条细分隔线收束，避免元信息与正文视觉粘连 */}
-      <div style={{ marginTop: 26, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
+      <SchemaForm
+        fields={props.fields}
+        values={values}
+        onChange={update}
+        exclude={['title', 'content']}
+      />
+
+      <div className="adm-sec" ref={bodySecRef}>
         <span className="label-site">正文</span>
         <hr className="adm-divider" style={{ flex: 1 }} />
-        <span style={{ fontSize: 11.5, color: 'var(--text-3)' }}>Markdown</span>
+        <span className="adm-sec-note">Markdown</span>
       </div>
 
       {mode === 'edit' ? (
@@ -159,23 +171,21 @@ export function ArticleEditor(props: {
             placeholder="在此写正文…"
             onChange={(event) => update('content', event.target.value)}
           />
-          <div className="adm-preview adm-scroll">
-            {content.trim() ? (
-              <Markdown source={content} />
-            ) : (
-              <span style={{ color: 'var(--text-3)', fontSize: 13 }}>左侧输入后，这里实时预览</span>
-            )}
-          </div>
+          {/* 分屏两栏都不自带滚动条：高度由内容撑开，滚动交给 .adm-pane，
+              否则同一屏里会出现两根滚动条且互相干扰 */}
+          <div className="adm-preview adm-scroll">{body}</div>
         </div>
       ) : (
-        <div className="adm-card adm-preview adm-scroll" style={{ minHeight: '58vh' }}>
-          {content.trim() ? (
-            <Markdown source={content} />
-          ) : (
-            <span style={{ color: 'var(--text-3)', fontSize: 13 }}>正文为空</span>
-          )}
+        <div className="adm-card adm-preview" style={{ padding: '26px 30px' }}>
+          {body}
         </div>
       )}
+
+      <FieldValue label="ID">
+        <span className="font-mono-site" style={{ fontSize: 12.5, color: 'var(--text-3)' }}>
+          {props.article._id}
+        </span>
+      </FieldValue>
 
       {/* 浮动工具条 */}
       <div className="adm-dock">
@@ -183,7 +193,7 @@ export function ArticleEditor(props: {
           <button
             key={item.value}
             type="button"
-            className="adm-tab"
+            className="adm-dock-btn"
             aria-selected={mode === item.value}
             onClick={() => setMode(item.value)}
           >

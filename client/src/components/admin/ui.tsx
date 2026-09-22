@@ -5,7 +5,7 @@
 //   所以本文件**不出现任何颜色字面量**，明暗主题自动跟随
 // - 图标一律内联 SVG（stroke=currentColor），不用 emoji，也不用 × / ✕ 字形
 // - 遵循 client/AGENTS.md：单 props 参数 + 内联类型、不用 useMemo/useCallback
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 
 /* ── 图标 ─────────────────────────────────────────────── */
 
@@ -206,30 +206,6 @@ export function Button(props: {
 
 /* ── 表单字段 ─────────────────────────────────────────── */
 
-export function Field(props: {
-  label: string;
-  hint?: string;
-  error?: string;
-  required?: boolean;
-  children: ReactNode;
-  style?: CSSProperties;
-}) {
-  return (
-    <label className="adm-field" style={props.style}>
-      <span className="adm-field-label">
-        {props.label}
-        {props.required ? <span className="adm-req">*</span> : null}
-      </span>
-      {props.children}
-      {props.error ? (
-        <span className="adm-field-error">{props.error}</span>
-      ) : props.hint ? (
-        <span className="adm-field-hint">{props.hint}</span>
-      ) : null}
-    </label>
-  );
-}
-
 export function TextInput(props: {
   value: string;
   onChange: (value: string) => void;
@@ -370,15 +346,15 @@ export function TagInput(props: {
   );
 }
 
-/* ── 分段标签 ─────────────────────────────────────────── */
+/* ── 标签（下划线式）──────────────────────────────────── */
 
 export function Tabs<T extends string>(props: {
   value: T;
-  options: Array<{ value: T; label: string; icon?: ReactNode; count?: number }>;
+  options: Array<{ value: T; label: string; count?: number }>;
   onChange: (value: T) => void;
 }) {
   return (
-    <div className="adm-tabs" role="tablist">
+    <nav className="adm-tabs" role="tablist">
       {props.options.map((option) => (
         <button
           key={option.value}
@@ -388,14 +364,133 @@ export function Tabs<T extends string>(props: {
           aria-selected={props.value === option.value}
           onClick={() => props.onChange(option.value)}
         >
-          {option.icon}
           {option.label}
           {typeof option.count === 'number' ? (
-            <span className="adm-tab-count">{option.count}</span>
+            <em className="adm-tab-count">{option.count}</em>
           ) : null}
         </button>
       ))}
+    </nav>
+  );
+}
+
+/* ── 左索引栏 ─────────────────────────────────────────── */
+
+/** 工作台左栏：标题 + 计数 + 可选动作（新建），下面是可滚动的条目列表 */
+export function Rail(props: {
+  title: string;
+  count: number;
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <aside className="adm-rail">
+      <div className="adm-rail-head">
+        <h2 className="adm-rail-title">{props.title}</h2>
+        <span className="adm-rail-count">{props.count}</span>
+        <span style={{ flex: 1 }} />
+        {props.action}
+      </div>
+      <div className="adm-rail-list">{props.children}</div>
+    </aside>
+  );
+}
+
+/**
+ * 索引条目：序号 + 标题 + 状态点。
+ * 只有标题一行 —— 这是整块界面密度（一屏 18 行）的来源，加第二行会立刻变回列表页。
+ * tone：on = 已启用（实心点）/ off = 未启用（空心点）/ warn = 需注意（实心点 + 变色标题）
+ */
+export function RailItem(props: {
+  index: number;
+  title: string;
+  selected: boolean;
+  tone?: 'on' | 'off' | 'warn';
+  onSelect: () => void;
+}) {
+  const tone = props.tone ?? 'on';
+  return (
+    <button
+      type="button"
+      className={['adm-ritem', tone === 'warn' ? 'adm-ritem--warn' : ''].filter(Boolean).join(' ')}
+      aria-current={props.selected}
+      title={props.title}
+      onClick={props.onSelect}
+    >
+      <span className="adm-ritem-n">{String(props.index).padStart(2, '0')}</span>
+      <span className="adm-ritem-t">{props.title}</span>
+      <span className={['adm-ritem-d', tone === 'off' ? 'adm-ritem-d--off' : ''].filter(Boolean).join(' ')} />
+    </button>
+  );
+}
+
+/* ── 详情页零件 ───────────────────────────────────────── */
+
+/** 章节 kicker（编号 + 英文小标），复用站点 .kicker-site 语言 */
+export function Kicker(props: { num: string; label: string }) {
+  return (
+    <div className="kicker-site">
+      <span className="kicker-num">{props.num}</span>
+      {props.label}
     </div>
+  );
+}
+
+/** 详情页字段行：左等宽标签 + 右控件，行间发丝线 */
+export function FieldRow(props: {
+  label: string;
+  hint?: string;
+  required?: boolean;
+  top?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <div className={['adm-fv', props.top ? 'adm-fv--top' : ''].filter(Boolean).join(' ')}>
+      <span className="adm-fv-k">
+        {props.label}
+        {props.required ? <span className="adm-req"> *</span> : null}
+      </span>
+      <span className="adm-fv-v">
+        {props.children}
+        {props.hint ? (
+          <span className="adm-field-hint" style={{ display: 'block', marginTop: 6 }}>
+            {props.hint}
+          </span>
+        ) : null}
+      </span>
+    </div>
+  );
+}
+
+/** 只读字段值（详情页里不可编辑的元信息） */
+export function FieldValue(props: { label: string; children: ReactNode }) {
+  return (
+    <div className="adm-fv">
+      <span className="adm-fv-k">{props.label}</span>
+      <span className="adm-fv-v">{props.children}</span>
+    </div>
+  );
+}
+
+/** 等宽文字链接（顶栏动作、索引栏「＋ 新建」） */
+export function LinkButton(props: {
+  children: ReactNode;
+  onClick?: () => void;
+  disabled?: boolean;
+  loading?: boolean;
+  tone?: 'default' | 'brand';
+  title?: string;
+}) {
+  return (
+    <button
+      type="button"
+      className={['adm-link', props.tone === 'brand' ? 'adm-link--brand' : ''].filter(Boolean).join(' ')}
+      title={props.title}
+      disabled={props.disabled || props.loading}
+      onClick={props.onClick}
+    >
+      {props.children}
+    </button>
   );
 }
 
@@ -421,15 +516,6 @@ export function EmptyState(props: { icon?: ReactNode; title: string; hint?: stri
       {props.hint ? <span style={{ fontSize: 12.5, maxWidth: 420, lineHeight: 1.6 }}>{props.hint}</span> : null}
       {props.action ? <div style={{ marginTop: 6 }}>{props.action}</div> : null}
     </div>
-  );
-}
-
-/** 等宽大写小标签（与站点 .label-site 同一语言） */
-export function MonoLabel(props: { children: ReactNode; style?: CSSProperties }) {
-  return (
-    <span className="label-site" style={props.style}>
-      {props.children}
-    </span>
   );
 }
 

@@ -1,4 +1,4 @@
-// 项目管理面板：左列项目清单，右列编辑表单。
+// 项目面板：左索引 + 右详情表单。
 //
 // 表单用 `key={doc._id}` 强制重挂载来重置内部状态 —— 比在 useEffect 里手动
 // 同步「选中项变了 → 重填表单」更不容易出错（AGENTS.md 也要求少用 effect）。
@@ -12,19 +12,27 @@ import {
   type ContentField,
 } from '@/services/admin-api';
 import { asText, emptyValues, SchemaForm } from './SchemaForm';
-import { Badge, Button, DangerConfirm, EmptyState, Icon, MonoLabel } from './ui';
+import { statusTone, StatusText } from './status';
+import {
+  Badge,
+  Button,
+  DangerConfirm,
+  EmptyState,
+  FieldValue,
+  Icon,
+  Kicker,
+  LinkButton,
+  Rail,
+  RailItem,
+  TextInput,
+} from './ui';
 
-const STATUS_LABELS: Record<string, string> = {
-  live: '在线',
-  wip: '开发中',
-  archived: '已归档',
-};
-
-function ProjectForm(props: {
+function ProjectDetail(props: {
   document: ContentDocument;
   fields: ContentField[];
   onSaved: () => Promise<void>;
   onDeleted: () => Promise<void>;
+  onAuthLost: () => void;
 }) {
   const [values, setValues] = useState<Record<string, unknown>>(() => {
     const initial: Record<string, unknown> = {};
@@ -47,18 +55,84 @@ function ProjectForm(props: {
       toast.success('已保存');
       await props.onSaved();
     } catch (error) {
+      if (error instanceof Error && error.name === 'Unauthorized') {
+        props.onAuthLost();
+        return;
+      }
       toast.error(error instanceof Error ? error.message : '保存失败');
     } finally {
       setSaving(false);
     }
   };
 
+  const remove = async () => {
+    try {
+      await deleteContent('projects', props.document._id);
+      toast.success('已删除');
+      await props.onDeleted();
+    } catch (error) {
+      if (error instanceof Error && error.name === 'Unauthorized') {
+        props.onAuthLost();
+        return;
+      }
+      toast.error(error instanceof Error ? error.message : '删除失败');
+    }
+  };
+
+  const color = asText(values.color) || 'var(--brand)';
+
   return (
-    <div className="adm-card adm-fade" style={{ padding: 22 }}>
-      <div className="adm-col-head" style={{ marginBottom: 18 }}>
-        <span className="label-site">项目详情</span>
-        <span style={{ flex: 1 }} />
+    <div className="adm-detail">
+      <Kicker num="06" label="PROJECTS" />
+
+      <TextInput
+        value={asText(values.name)}
+        big
+        placeholder="项目名称"
+        onChange={(next) => update('name', next)}
+      />
+
+      <div className="adm-dmeta">
+        <span
+          style={{
+            width: 9,
+            height: 9,
+            borderRadius: 3,
+            background: color,
+            display: 'inline-block',
+          }}
+        />
+        <span>{asText(values.tagline) || '未填简介'}</span>
+        <span>排序 {asText(values.order) || '0'}</span>
+        <StatusText value={asText(values.status)} />
+      </div>
+
+      <div className="adm-sec">
+        <span className="label-site">字段</span>
+        <hr className="adm-divider" style={{ flex: 1 }} />
         {dirty ? <Badge tone="brand">未保存</Badge> : null}
+      </div>
+
+      <SchemaForm
+        fields={props.fields}
+        values={values}
+        onChange={update}
+        exclude={['name']}
+      />
+
+      <FieldValue label="ID">
+        <span className="font-mono-site" style={{ fontSize: 12.5, color: 'var(--text-3)' }}>
+          {props.document._id}
+        </span>
+      </FieldValue>
+
+      <div className="adm-dock">
+        <span
+          className="label-site"
+          style={{ padding: '0 8px', minWidth: 62, textAlign: 'center' }}
+        >
+          {dirty ? '有改动' : '已同步'}
+        </span>
         <Button
           variant="primary"
           size="sm"
@@ -69,28 +143,8 @@ function ProjectForm(props: {
         >
           保存
         </Button>
-      </div>
-
-      <SchemaForm fields={props.fields} values={values} onChange={update} />
-
-      <hr className="adm-divider" style={{ margin: '22px 0 16px' }} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <MonoLabel>ID {props.document._id}</MonoLabel>
-        <span style={{ flex: 1 }} />
-        <DangerConfirm
-          size="sm"
-          label="删除项目"
-          confirmLabel="确认删除"
-          onConfirm={async () => {
-            try {
-              await deleteContent('projects', props.document._id);
-              toast.success('已删除');
-              await props.onDeleted();
-            } catch (error) {
-              toast.error(error instanceof Error ? error.message : '删除失败');
-            }
-          }}
-        />
+        <span className="adm-dock-sep" />
+        <DangerConfirm size="sm" label="删除" confirmLabel="确认删除" onConfirm={remove} />
       </div>
     </div>
   );
@@ -100,11 +154,13 @@ export function ProjectsPanel(props: {
   fields: ContentField[];
   documents: ContentDocument[];
   onReload: () => Promise<void>;
+  onAuthLost: () => void;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
-  const selected = props.documents.find((doc) => doc._id === selectedId) ?? null;
+  // 未选中时默认落到第一条：切标签后右栏不该是一片空白（demo B 的行为）
+  const selected = props.documents.find((doc) => doc._id === selectedId) ?? props.documents[0] ?? null;
 
   const create = async () => {
     setCreating(true);
@@ -118,6 +174,10 @@ export function ProjectsPanel(props: {
       setSelectedId(id);
       toast.success('已创建，记得补全信息');
     } catch (error) {
+      if (error instanceof Error && error.name === 'Unauthorized') {
+        props.onAuthLost();
+        return;
+      }
       toast.error(error instanceof Error ? error.message : '创建失败');
     } finally {
       setCreating(false);
@@ -125,85 +185,49 @@ export function ProjectsPanel(props: {
   };
 
   return (
-    <div className="adm-masterdetail">
-      <div className="adm-list">
-        <div className="adm-col-head">
-          <span className="label-site">项目 · {props.documents.length}</span>
-          <span style={{ flex: 1 }} />
-          <Button size="sm" variant="quiet" icon={<Icon.Plus size={14} />} loading={creating} onClick={create}>
-            新建
-          </Button>
-        </div>
+    <div className="adm-workbench">
+      <Rail
+        title="项目"
+        count={props.documents.length}
+        action={
+          <LinkButton tone="brand" loading={creating} onClick={create}>
+            ＋ 新建项目
+          </LinkButton>
+        }
+      >
+        {props.documents.map((doc, index) => (
+          <RailItem
+            key={doc._id}
+            index={index + 1}
+            title={asText(doc.name) || '(未命名)'}
+            selected={doc._id === selectedId}
+            tone={statusTone(asText(doc.status))}
+            onSelect={() => setSelectedId(doc._id)}
+          />
+        ))}
+      </Rail>
 
-        {props.documents.length === 0 ? (
-          <div className="adm-card">
-            <EmptyState icon={<Icon.Folder size={18} />} title="还没有项目" />
-          </div>
-        ) : (
-          props.documents.map((doc) => (
-            <button
-              key={doc._id}
-              type="button"
-              className="adm-row"
-              aria-current={doc._id === selectedId}
-              onClick={() => setSelectedId(doc._id)}
-            >
-              <span
-                style={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: 3,
-                  flexShrink: 0,
-                  background: asText(doc.color) || 'var(--brand)',
-                }}
-              />
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <span className="adm-row-title" style={{ display: 'block' }}>
-                  {asText(doc.name) || '(未命名)'}
-                </span>
-                <span
-                  style={{
-                    display: 'block',
-                    fontSize: 12,
-                    color: 'var(--text-3)',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {asText(doc.tagline) || '—'}
-                </span>
-              </span>
-              <Badge tone={asText(doc.status) === 'live' ? 'brand' : 'default'}>
-                {STATUS_LABELS[asText(doc.status)] ?? asText(doc.status) ?? '—'}
-              </Badge>
-            </button>
-          ))
-        )}
-      </div>
-
-      <div>
+      <section className="adm-pane">
         {selected ? (
-          <ProjectForm
+          <ProjectDetail
             key={selected._id}
             document={selected}
             fields={props.fields}
             onSaved={props.onReload}
+            onAuthLost={props.onAuthLost}
             onDeleted={async () => {
               setSelectedId(null);
               await props.onReload();
             }}
           />
         ) : (
-          <div className="adm-card">
-            <EmptyState
-              icon={<Icon.Folder size={18} />}
-              title="选择左侧项目进行编辑"
-              hint="修改会直接写入线上数据库；颜色、符号、排序都会立刻反映在首页项目墙。"
-            />
-          </div>
+          <EmptyState
+            icon={<Icon.Folder size={18} />}
+            title="还没有项目"
+            hint="点左上角「＋ 新建项目」；颜色、符号、排序都会立刻反映在首页项目墙。"
+          />
         )}
-      </div>
+      </section>
     </div>
   );
 }

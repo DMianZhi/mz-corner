@@ -4,7 +4,7 @@
 // `GET /api/admin/content`（即 server/utils/content-schema.ts 的白名单），
 // 服务端加字段、改标签、改枚举，后台表单自动跟上，前端不需要同步改代码。
 import type { ContentField } from '@/services/admin-api';
-import { Field, Select, TagInput, TextArea, TextInput } from './ui';
+import { FieldRow, Select, TagInput, TextArea, TextInput } from './ui';
 
 /** 枚举值的中文名（服务端存的是语义值，展示层翻译） */
 const ENUM_LABELS: Record<string, string> = {
@@ -51,33 +51,25 @@ export function SchemaForm(props: {
   onChange: (name: string, value: unknown) => void;
   /** 由调用方自行渲染的字段（如文章编辑器的标题与正文） */
   exclude?: string[];
-  /** 两列栅格中「占满整行」的字段类型 */
-  fullWidthTypes?: ContentField['type'][];
 }) {
   const excluded = props.exclude ?? [];
-  const fullTypes = props.fullWidthTypes ?? ['text'];
   const visible = props.fields.filter((field) => !excluded.includes(field.name));
 
   return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
-        gap: 18,
-      }}
-    >
+    <div>
       {visible.map((field) => {
         const value = props.values[field.name];
-        const full = fullTypes.includes(field.type);
+        // 多行文本的标签与控件顶端对齐，否则标签会吊在文本框中间
+        const multiline = field.type === 'text';
         return (
-          <Field
+          <FieldRow
             key={field.name}
             label={field.label}
             hint={field.hint}
             required={field.required}
-            style={full ? { gridColumn: '1 / -1' } : undefined}
+            top={multiline}
           >
-            {field.type === 'text' ? (
+            {multiline ? (
               <TextArea
                 value={asText(value)}
                 rows={field.name === 'description' || field.name === 'content' ? 6 : 3}
@@ -112,7 +104,7 @@ export function SchemaForm(props: {
                 onChange={(next) => props.onChange(field.name, next)}
               />
             )}
-          </Field>
+          </FieldRow>
         );
       })}
     </div>

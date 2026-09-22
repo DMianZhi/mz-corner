@@ -1,11 +1,11 @@
 // 管理后台 UI 端到端自检（真实浏览器 + 本地 harness 假库）。
 //
-// 验证的不只是「画出来了」：登录门、四个内容面板、编辑三态、真实保存落库、
-// 明暗双主题，以及全程零控制台错误。
+// 验证的不只是「画出来了」：登录门、工作台骨架（左索引 + 右详情，整页不滚）、
+// 编辑三态、真实保存落库、四个内容面板、明暗双主题，以及全程零控制台错误。
 const fs = require('node:fs');
 const { chromium } = require('C:/Users/admin/.wpscomate/agent/skills/custom/career-ops/node_modules/playwright');
 
-const BASE = 'http://localhost:5199';
+const BASE = process.env.E2E_BASE || 'http://localhost:5199';
 const API = 'http://127.0.0.1:8900/mz-api';
 // 口令不入库：从环境变量读（export ADMIN_PASSWORD=... 后运行）
 const PW = process.env.ADMIN_PASSWORD;
@@ -47,6 +47,10 @@ function check(name, expected, actual) {
     await page.waitForTimeout(350);
     await page.screenshot({ path: `${OUT}/${name}.png` });
   };
+  // 顶部标签必须限定在 .adm-tabs 内点：索引栏条目文本可能撞上标签名
+  // （例如评论正文里出现「项目」），Playwright 严格模式会直接报错
+  const clickTab = (label) => page.click(`.adm-tabs .adm-tab:has-text("${label}")`);
+  const clickDock = (label) => page.click(`.adm-dock .adm-dock-btn:has-text("${label}")`);
 
   console.log('── 1. 登录门 ───────────────────────────────');
   await page.goto(`${BASE}/#/admin`, { waitUntil: 'domcontentloaded' });
@@ -65,26 +69,73 @@ function check(name, expected, actual) {
   // 正确口令
   await page.fill('input[placeholder="管理口令"]', PW);
   await page.click('button:has-text("登录")');
-  await page.waitForSelector('text=站点设置', { timeout: 15000 });
-  await page.waitForSelector('.adm-row', { timeout: 15000 });
-  const rowCount = await page.locator('.adm-row').count();
-  check('登录后进入文章列表（有数据）', true, rowCount > 0);
+  await page.waitForSelector('.adm-tabs', { timeout: 15000 });
+  await page.waitForSelector('.adm-ritem', { timeout: 15000 });
+  const rowCount = await page.locator('.adm-ritem').count();
+  check('登录后进入文章索引（有数据）', true, rowCount > 0);
   await shot('03-articles-dark');
 
-  console.log('\n── 2. 沉浸式编辑器三态 ─────────────────────');
-  await page.locator('.adm-row').first().click();
+  console.log('\n── 2. 工作台骨架（左索引 + 右详情）──────────');
+  const geom = await page.evaluate(() => {
+    const rail = document.querySelector('.adm-rail');
+    const pane = document.querySelector('.adm-pane');
+    const wb = document.querySelector('.adm-workbench');
+    const de = document.documentElement;
+    return {
+      railW: rail ? Math.round(rail.getBoundingClientRect().width) : -1,
+      railH: rail ? Math.round(rail.getBoundingClientRect().height) : -1,
+      paneW: pane ? Math.round(pane.getBoundingClientRect().width) : -1,
+      paneScrolls: pane ? getComputedStyle(pane).overflowY : null,
+      // 整页不该出现滚动条：滚动只发生在 rail-list / pane 两个容器内
+      docOverflow: de.scrollHeight - window.innerHeight,
+      // 索引栏与详情栏顶端对齐（demo 里头部 49px 的落地形态）
+      sameTop: rail && pane ? Math.abs(rail.getBoundingClientRect().top - pane.getBoundingClientRect().top) < 2 : false,
+      wbFills: wb ? Math.round(wb.getBoundingClientRect().bottom) : -1,
+      winH: window.innerHeight,
+    };
+  });
+  check('左索引宽度 320px', 320, geom.railW);
+  check('左索引占满视口高（不是卡片式短栏）', true, geom.railH > 700);
+  check('右详情是独立滚动容器', 'auto', geom.paneScrolls);
+  check('整页无滚动（不随内容长短抖动）', true, geom.docOverflow <= 1);
+  check('左右两栏顶端对齐', true, geom.sameTop);
+  check('工作台吃满视口底部', true, geom.wbFills >= geom.winH - 2);
+
+  // 点第二条索引，右栏标题必须跟着换（主从联动）
+  await page.locator('.adm-ritem').nth(1).click();
   await page.waitForSelector('input[placeholder="文章标题"]', { timeout: 10000 });
+  const secondTitle = await page.locator('input[placeholder="文章标题"]').inputValue();
+  const railTitle = (await page.locator('.adm-ritem').nth(1).locator('.adm-ritem-t').textContent())?.trim();
+  check('点索引后右栏切到该条', secondTitle, railTitle);
+  await page.locator('.adm-ritem').first().click();
+  await page.waitForTimeout(300);
+
+  console.log('\n── 3. 编辑器三态（浮动 dock）────────────────');
   const titleInput = page.locator('input[placeholder="文章标题"]');
   const originalTitle = await titleInput.inputValue();
   check('打开文章带入原值', true, originalTitle.length > 0);
   await shot('04-editor-edit-dark');
 
-  await page.click('button:has-text("分屏")');
+  await clickDock('分屏');
   await page.waitForSelector('.adm-preview', { timeout: 10000 });
   check('分屏态 = 编辑器 + 预览并存', 1, await page.locator('.adm-pane-input').count());
+  // 切到分屏必须把正文带到视野里，否则「点了分屏却只看到表单」
+  const splitView = await page.evaluate(() => {
+    const pane = document.querySelector('.adm-pane');
+    const ta = document.querySelector('.adm-pane-input');
+    return { paneScrollTop: Math.round(pane.scrollTop), taTop: Math.round(ta.getBoundingClientRect().top), winH: window.innerHeight };
+  });
+  check('分屏态：容器已滚到正文区', true, splitView.paneScrollTop > 100);
+  check('分屏态：正文顶部在视野内', true, splitView.taTop > 0 && splitView.taTop < splitView.winH * 0.6);
+  // 分屏/预览要放宽详情列，否则两栏各自都太窄
+  const wideW = await page.evaluate(() => {
+    const el = document.querySelector('.adm-detail');
+    return el ? Math.round(el.getBoundingClientRect().width) : -1;
+  });
+  check('分屏态详情列放宽', true, wideW > 720);
   await shot('05-editor-split-dark');
 
-  await page.click('button:has-text("预览")');
+  await clickDock('预览');
   await page.waitForTimeout(500);
   check(
     '预览态 = 只剩预览',
@@ -93,13 +144,13 @@ function check(name, expected, actual) {
   );
   await shot('06-editor-preview-dark');
 
-  console.log('\n── 3. 真实保存落库 ─────────────────────────');
-  await page.click('button:has-text("编辑")');
+  console.log('\n── 4. 真实保存落库 ─────────────────────────');
+  await clickDock('编辑');
   const marker = `UI 自检 ${Date.now()}`;
   await titleInput.fill(marker);
   const dirtyBadge = await page.locator('text=未保存').count();
   check('改动后出现「未保存」标记', true, dirtyBadge > 0);
-  await page.click('button:has-text("保存")');
+  await page.click('.adm-dock button:has-text("保存")');
   await page.waitForSelector('text=已保存', { timeout: 10000 });
   check('保存后出现成功提示', true, true);
 
@@ -114,43 +165,65 @@ function check(name, expected, actual) {
 
   // 还原标题，避免污染后续截图与假库
   await titleInput.fill(originalTitle);
-  await page.click('button:has-text("保存")');
+  await page.click('.adm-dock button:has-text("保存")');
   await page.waitForTimeout(1200);
 
-  console.log('\n── 4. 四个内容面板 ─────────────────────────');
-  await page.click('button:has-text("返回列表")');
-  await page.waitForSelector('.adm-row', { timeout: 10000 });
-
+  console.log('\n── 5. 四个内容面板 ─────────────────────────');
   for (const [label, file] of [
     ['项目', '08-projects-dark'],
     ['评论', '09-comments-dark'],
     ['站点设置', '10-settings-dark'],
   ]) {
-    await page.click(`button:has-text("${label}")`);
+    await clickTab(label);
     await page.waitForTimeout(700);
-    const bodyText = await page.locator('.adm-page').innerText();
-    check(`${label} 面板有内容`, true, bodyText.trim().length > 40);
+    // 切标签后右栏必须已有内容（默认选中第一条）—— 只验「文字够长」会放过空栏
+    const fieldRows = await page.locator('.adm-fv').count();
+    const railItems = await page.locator('.adm-ritem').count();
+    check(`${label} 面板：索引有数据且右栏默认展开`, true, fieldRows >= 1 && railItems >= 1);
     await shot(file);
   }
+  // 站点设置：选中一项 → 右栏出现字段行，贴底保存条在位
+  await page.locator('.adm-ritem').first().click();
+  await page.waitForTimeout(400);
+  check('站点设置详情有字段行', true, (await page.locator('.adm-fv').count()) >= 3);
+  check('站点设置贴底保存条在位', 1, await page.locator('.adm-sticky-bar').count());
 
-  console.log('\n── 5. 浅色主题 ─────────────────────────────');
+  console.log('\n── 6. 浅色主题 ─────────────────────────────');
   await page.click('button[aria-label="切换主题"]');
   await page.waitForTimeout(600);
   const isLight = await page.evaluate(() => document.documentElement.classList.contains('light'));
   check('切到浅色主题', true, isLight);
   await shot('11-settings-light');
 
-  await page.click('button:has-text("文章")');
-  await page.waitForSelector('.adm-row', { timeout: 10000 });
+  await clickTab('文章');
+  await page.waitForSelector('.adm-ritem', { timeout: 10000 });
+  await page.locator('.adm-ritem').first().click();
+  await page.waitForSelector('input[placeholder="文章标题"]', { timeout: 10000 });
+  await page.waitForTimeout(400);
   await shot('12-articles-light');
 
-  await page.locator('.adm-row').first().click();
-  await page.waitForSelector('input[placeholder="文章标题"]', { timeout: 10000 });
-  await page.click('button:has-text("分屏")');
+  await clickDock('分屏');
   await page.waitForTimeout(700);
   await shot('13-editor-split-light');
 
-  console.log('\n── 6. 控制台洁净度 ─────────────────────────');
+  console.log('\n── 7. 窄屏降级（索引条挪到上方）─────────────');
+  await page.setViewportSize({ width: 760, height: 900 });
+  await page.waitForTimeout(500);
+  const narrow = await page.evaluate(() => {
+    const rail = document.querySelector('.adm-rail');
+    const pane = document.querySelector('.adm-pane');
+    return {
+      railW: rail ? Math.round(rail.getBoundingClientRect().width) : -1,
+      railH: rail ? Math.round(rail.getBoundingClientRect().height) : -1,
+      paneH: pane ? Math.round(pane.getBoundingClientRect().height) : -1,
+    };
+  });
+  check('窄屏索引条横向铺满', true, narrow.railW > 700);
+  check('窄屏索引条不压满屏（详情仍有空间）', true, narrow.paneH > 300);
+  await shot('14-narrow-light');
+  await page.setViewportSize({ width: 1440, height: 900 });
+
+  console.log('\n── 8. 控制台洁净度 ─────────────────────────');
   // 未登录时探测会话、以及本轮故意输错口令，这两个端点回 401 是设计行为
   const expected401 = /^\/mz-api\/api\/admin\/(session|login)$/;
   const unexpected401 = unauthorizedPaths.filter((p) => !expected401.test(p));
