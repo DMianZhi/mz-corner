@@ -331,9 +331,33 @@ async function visualDiff(page, onSel, offSel, keys) {
 
   // 页面级标题 + 跳转主内容（P4）
   check('存在页面级 h1', '管理后台', (await page.locator('h1').first().textContent())?.trim());
+  // 默认必须是「看不见」——原断言只查聚焦后是否可见，于是「一直露在顶栏上」
+  // 这个 bug 一直绿（元素存在 ≠ 看不见，又是渲染级漏检）。
+  await page.evaluate(() => document.activeElement?.blur?.());
+  await page.waitForTimeout(250);
+  const skipHidden = await page.evaluate(() => {
+    const el = document.querySelector('.adm-skip');
+    const r = el.getBoundingClientRect();
+    // 命中测试：该坐标上真正被点到的元素是不是它（被顶栏盖住/在视口外都算没露出）
+    const cx = Math.round(r.left + r.width / 2);
+    const cy = Math.round(r.top + r.height / 2);
+    const hit = cy >= 0 && cy < innerHeight ? document.elementFromPoint(cx, cy) : null;
+    return { bottom: r.bottom, top: r.top, isHit: hit === el || el.contains(hit) };
+  });
+  check('跳转链接默认完全在视口外', true, skipHidden.bottom <= 0);
+  check('跳转链接默认不可被点到（不挡顶栏）', false, skipHidden.isHit);
   await page.locator('.adm-skip').focus();
-  const skipTop = await page.locator('.adm-skip').evaluate((el) => el.getBoundingClientRect().top);
-  check('跳转链接聚焦后浮出视口', true, skipTop >= 0);
+  // 浮出是 transform 过渡（0.16s），必须等动画结束再量，否则量到中途位置
+  await page.waitForTimeout(350);
+  const skipShown = await page.locator('.adm-skip').evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const navH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--nav-h')) || 0;
+    return { top: Math.round(r.top), bottom: Math.round(r.bottom), navH, vh: innerHeight };
+  });
+  check('跳转链接聚焦后完整落在视口内', true, skipShown.top >= 0 && skipShown.bottom <= skipShown.vh);
+  // 落点应在顶栏之下，不能压住品牌/页签（视觉上是"浮出"，不是盖在顶栏上）
+  check('跳转链接浮出后位于顶栏下方', true, skipShown.top >= skipShown.navH);
+  console.log(`       浮出落点 top=${skipShown.top}px（顶栏 ${skipShown.navH}px）`);
   await page.keyboard.press('Enter');
   await page.waitForTimeout(250);
   check('跳转后焦点落到主内容', 'adm-main', await page.evaluate(() => document.activeElement?.id || ''));

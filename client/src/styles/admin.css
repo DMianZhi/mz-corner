@@ -994,9 +994,14 @@ html.light .adm-shell {
 /* 跳转到主内容：默认视觉隐藏，键盘聚焦时从顶栏下方浮出 */
 .adm-skip {
   position: fixed;
-  top: calc(var(--nav-h) + 8px);
+  top: 0;
   left: 50%;
-  transform: translate(-50%, -180%);
+  /* 隐藏量必须与自身高度无关。上一版是 top: calc(var(--nav-h) + 8px) 配
+     translateY(-180%)：百分比相对自身高度，元素只有 36.75px 高时只上移
+     66.15px，而 top 是 72px —— 实际停在 y=5.85px，一直露在顶栏上，
+     看起来就像顶栏里多了个莫名其妙的按钮（实测确认）。
+     改成 top: 0 + 上移「自身高度 + 8px」，任何字号/换行下都整块在视口外。 */
+  transform: translate(-50%, calc(-100% - 8px));
   z-index: 60;
   padding: 8px 14px;
   border-radius: 999px;
@@ -1008,7 +1013,8 @@ html.light .adm-shell {
   transition: transform 0.16s ease;
 }
 .adm-skip:focus {
-  transform: translate(-50%, 0);
+  /* 浮到顶栏下方（与上一版 top: calc(var(--nav-h) + 8px) 的落点一致） */
+  transform: translate(-50%, calc(var(--nav-h) + 8px));
   outline: 2px solid var(--brand);
 }
 /* 面板区外层 main：布局与之前完全一致（tabpanel 仍是 shell 的 flex 子项） */

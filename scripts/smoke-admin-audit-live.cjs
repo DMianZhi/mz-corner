@@ -145,7 +145,9 @@ async function publicCount() {
     }
     // 新 CSS 是否真的含本轮修复（防“传了但传的是旧 dist”）
     const cssText = await (await fetch(`${staticHost.replace(/\/$/, '')}/assets/${liveCss}`)).text();
-    check('线上 CSS 含 [aria-selected] 选中态规则', true, cssText.includes("[aria-selected='true']"));
+    // 压缩器会把 [aria-selected='true'] 去引号成 [aria-selected=true]，所以按语义匹配
+    check('线上 CSS 含 [aria-selected] 选中态规则', true, /\[aria-selected=?["']?true["']?\]/.test(cssText));
+    check('线上 CSS 含 [aria-pressed] 激活态规则', true, /\[aria-pressed=?["']?true["']?\]/.test(cssText));
     // 只看选择器本体，不用裸词匹配 —— 注释里出现这个词不算问题（构建会去注释，但别赌）
     check('线上 CSS 已无死选择器 [aria-current]', false, /\[aria-current[\]=]/.test(cssText));
     check('线上 CSS 已无死选择器 .adm-dock-btn[aria-selected]', false, /\.adm-dock-btn\[aria-selected/.test(cssText));
@@ -185,6 +187,17 @@ async function publicCount() {
   check('默认落在文章 tab', 1, await page.locator('#adm-tabpanel-articles').count());
   check('tabpanel 关联 tab（a11y）', 'adm-tab-articles', await page.locator('#adm-tabpanel-articles').getAttribute('aria-labelledby'));
   check('tab 按钮有 id（a11y）', 1, await page.locator('#adm-tab-articles').count());
+  // 跳转主内容：默认必须看不见（曾因隐藏量相对自身高度算错，一直露在顶栏上）
+  const skipHidden = await page.evaluate(() => {
+    const el = document.querySelector('.adm-skip');
+    if (!el) return { missing: true };
+    const r = el.getBoundingClientRect();
+    const cy = Math.round(r.top + r.height / 2);
+    const hit = cy >= 0 && cy < innerHeight ? document.elementFromPoint(Math.round(r.left + r.width / 2), cy) : null;
+    return { bottom: r.bottom, isHit: hit === el || el.contains(hit) };
+  });
+  check('跳转链接默认完全在视口外', true, skipHidden.bottom <= 0);
+  check('跳转链接默认不可被点到（不挡顶栏）', false, skipHidden.isHit);
 
   // ── 3. 次级信息对比度（P1） ─────────────────────────────
   console.log('\n[3] 次级信息对比度（P1 目标 ≥4.5:1）');
