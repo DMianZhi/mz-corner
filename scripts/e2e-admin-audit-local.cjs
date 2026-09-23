@@ -334,6 +334,30 @@ async function visualDiff(page, onSel, offSel, keys) {
   await page.evaluate(() => document.activeElement?.blur?.());
   await page.waitForTimeout(250);
 
+  // 页签键盘可达性：用户实测反馈「tab 只能定位到文章，其他三个只能用方向键，
+  // 这不是体验割裂吗」。原先照 WAI-ARIA 做了 roving tabindex（只 1 个停靠点），
+  // 对 4 项控件是净损失（省 3 站、代价是零可发现性）→ 改为四个全部可 Tab。
+  check('四个页签全部可 Tab', 4, await page.locator('.adm-tab[tabindex="0"]').count());
+  await page.locator('#adm-tab-articles').focus();
+  await page.keyboard.press('Tab');
+  check('Tab 可从「文章」走到下一个页签', 'adm-tab-projects', await page.evaluate(() => document.activeElement?.id || ''));
+  // 回归：方向键必须「焦点跟随选中」——原实现 listRef 声明了却没挂到 nav 上
+  // （死 ref），focus() 永远空操作，方向键只改选中、焦点不动，且焦点会停在
+  // tabindex=-1 的旧项上。原断言只查了「选中是否变化」，查不出这个。
+  await page.locator('#adm-tab-articles').focus();
+  await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(300);
+  const tabArrow = await page.evaluate(() => {
+    const f = document.activeElement;
+    const sel = document.querySelector('[role=tab][aria-selected=true]');
+    return { focus: f?.id, selected: sel?.id, follows: f === sel };
+  });
+  check('方向键切换后焦点跟随选中项', true, tabArrow.follows);
+  console.log(`       焦点 ${tabArrow.focus} / 选中 ${tabArrow.selected}`);
+  check('方向键切换后焦点不落在 tabindex=-1 的项上', '0', await page.evaluate(() => document.activeElement?.getAttribute?.('tabindex')));
+  await page.locator('#adm-tab-articles').click();
+  await page.waitForTimeout(300);
+
   // 左栏键盘导航：roving tabindex + 方向键（P4：24 条 = 24 个 Tab 停靠点）
   check('左栏只有一个 Tab 停靠点', 1, await page.locator('.adm-ritem[tabindex="0"]').count());
   const railCount = await page.locator('.adm-ritem').count();

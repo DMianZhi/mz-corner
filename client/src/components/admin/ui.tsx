@@ -476,21 +476,31 @@ export function Tabs<T extends string>(props: {
   options: Array<{ value: T; label: string; count?: number; panelId?: string }>;
   onChange: (value: T) => void;
 }) {
-  // 方向键切换（WAI-ARIA tabs 模式）：tablist 内 Tab 键只进一次，
-  // 左右箭头在四个标签间移动并选中 —— 读屏与键盘用户的预期行为。
-  const listRef = useRef<HTMLButtonElement | null>(null);
+  // 键盘可达性：四个页签全部进 Tab 序列。
+  //
+  // 上一版照 WAI-ARIA tabs 规范做了 roving tabindex（Tab 只进一次、靠方向键切换）。
+  // 用户实测反馈「tab 只能定位到文章，其他三个只能用方向键，这不是体验割裂吗」——
+  // 判断成立：roving 对 20+ 项的长列表是净收益，对 4 项控件却是净损失。省下
+  // 3 个 Tab 停靠点，代价是零可发现性（不知道有方向键的人根本到不了另外三个），
+  // 而且和顶栏那组「Tab 走遍全部」的导航链接行为不一致。
+  // 现在：Tab 走遍全部；方向键保留为快捷方式，两条路都能到。
+  //
+  // 顺带修一个死 ref：listRef 原来声明了却从没挂到 <nav> 上，于是下面那句
+  // focus() 永远是空操作 —— 方向键只改选中、焦点不动，实测「焦点跟随: false」，
+  // 而且焦点会停在 tabindex=-1 的旧项上，状态自相矛盾。
+  const listRef = useRef<HTMLElement | null>(null);
   const move = (current: T, offset: 1 | -1) => {
     const index = props.options.findIndex((option) => option.value === current);
     if (index < 0) return;
     const next = props.options[(index + offset + props.options.length) % props.options.length];
     props.onChange(next.value);
-    // 焦点跟随选中项（roving tabindex 的简化版：始终只有一个可停靠点）
+    // 方向键切换时焦点跟随选中项（否则焦点留在旧页签上，与选中态脱节）
     listRef.current
       ?.querySelector<HTMLButtonElement>(`[data-tab="${next.value}"]`)
       ?.focus();
   };
   return (
-    <nav className="adm-tabs" role="tablist">
+    <nav ref={listRef} className="adm-tabs" role="tablist">
       {props.options.map((option) => (
         <button
           key={option.value}
@@ -501,7 +511,7 @@ export function Tabs<T extends string>(props: {
           className="adm-tab"
           aria-selected={props.value === option.value}
           aria-controls={option.panelId}
-          tabIndex={props.value === option.value ? 0 : -1}
+          tabIndex={0}
           onClick={() => props.onChange(option.value)}
           onKeyDown={(event) => {
             if (event.key === 'ArrowRight') {

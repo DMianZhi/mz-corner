@@ -187,6 +187,17 @@ async function publicCount() {
   check('默认落在文章 tab', 1, await page.locator('#adm-tabpanel-articles').count());
   check('tabpanel 关联 tab（a11y）', 'adm-tab-articles', await page.locator('#adm-tabpanel-articles').getAttribute('aria-labelledby'));
   check('tab 按钮有 id（a11y）', 1, await page.locator('#adm-tab-articles').count());
+  // 页签键盘可达性：四个全部可 Tab（原先 roving 只 1 个停靠点，用户反馈「体验割裂」）
+  check('四个页签全部可 Tab', 4, await page.locator('.adm-tab[tabindex="0"]').count());
+  // 回归：方向键必须焦点跟随选中（原 listRef 是死 ref，focus() 空操作）
+  await page.locator('#adm-tab-articles').focus();
+  await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(300);
+  check('方向键切换后焦点跟随选中项', true, await page.evaluate(() =>
+    document.activeElement === document.querySelector('[role=tab][aria-selected=true]'),
+  ));
+  await page.locator('#adm-tab-articles').click();
+  await page.waitForTimeout(300);
 
   // ── 3. 次级信息对比度（P1） ─────────────────────────────
   console.log('\n[3] 次级信息对比度（P1 目标 ≥4.5:1）');
