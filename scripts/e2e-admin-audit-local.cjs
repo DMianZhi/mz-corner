@@ -318,6 +318,23 @@ function check(name, expected, actual) {
   check('站点设置保存入口是 dock', 1, await page.locator('.adm-dock:has-text("保存全部")').count());
   check('旧吸附条已移除', 0, await page.locator('.adm-sticky-bar').count());
 
+  // Ctrl+S 绑定（P4）：此前只有文章编辑器响应，站点设置/项目/评论按了没反应
+  await page.locator('.adm-ritem').first().click();
+  await page.waitForTimeout(300);
+  // 先制造改动：站点设置的 save 在无改动时直接 return（正确行为，不是 bug），
+  // 直接按 Ctrl+S 不会发请求，断言会假失败。
+  // 注意必须填「不同的值」：React 受控输入会把「值没变」的 input 事件吃掉，
+  // 填回原值不会触发 onChange，draftStore 收不到草稿 —— 实测踩过一次。
+  const valueInput = page.locator('[data-field="value"]').first();
+  await valueInput.fill(`${await valueInput.inputValue()}·e2e`);
+  await page.waitForTimeout(250);
+  check('改动后左栏出现草稿点', 1, await page.locator('.adm-ritem-p').count());
+  const writesBeforeShortcut = writes.length;
+  await page.keyboard.press('Control+s');
+  await page.waitForTimeout(1200);
+  check('站点设置 Ctrl+S 触发保存', true, writes.length > writesBeforeShortcut);
+  check('保存后草稿点清除', 0, await page.locator('.adm-ritem-p').count());
+
   // 新建自动聚焦标题（P0-2 补漏）
   await page.locator('#adm-tab-articles').click();
   await page.waitForTimeout(300);

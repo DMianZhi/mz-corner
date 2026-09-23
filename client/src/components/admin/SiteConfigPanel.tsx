@@ -98,6 +98,17 @@ export function SiteConfigPanel(props: {
     }
   };
 
+  // Ctrl/Cmd+S：与文章编辑器一致，四个面板都能手不离键盘保存（审计 P4）
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        if (!saving) void save();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
   return (
     <div className="adm-workbench">
       <Rail title="站点设置" count={props.documents.length}>
@@ -123,6 +134,7 @@ export function SiteConfigPanel(props: {
             <TextInput
               value={fieldOf(selected, 'description')}
               big
+              fieldName="description"
               placeholder={asText(selected.key)}
               onChange={(next) => setField(selected, 'description', next)}
             />
@@ -147,11 +159,13 @@ export function SiteConfigPanel(props: {
                   <TextArea
                     value={fieldOf(selected, 'value')}
                     rows={3}
+                    fieldName="value"
                     onChange={(next) => setField(selected, 'value', next)}
                   />
                 ) : (
                   <TextInput
                     value={fieldOf(selected, 'value')}
+                    fieldName="value"
                     onChange={(next) => setField(selected, 'value', next)}
                   />
                 )}
@@ -165,12 +179,14 @@ export function SiteConfigPanel(props: {
                 <TextInput
                   value={fieldOf(selected, 'key')}
                   monospace
+                  fieldName="key"
                   onChange={(next) => setField(selected, 'key', next)}
                 />
               </FieldRow>
               <FieldRow label="分组">
                 <TextInput
                   value={fieldOf(selected, 'group')}
+                  fieldName="group"
                   onChange={(next) => setField(selected, 'group', next)}
                 />
               </FieldRow>

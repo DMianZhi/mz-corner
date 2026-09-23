@@ -5,7 +5,7 @@
 //
 // 索引栏用**正文**而不是昵称做标题：审核时真正要判断的是内容，
 // 昵称与时间放在右侧元信息行里，不占用索引栏那一行宽度。
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import {
   deleteContent,
@@ -16,7 +16,6 @@ import {
 import { asText, focusFirstError, SchemaForm, validateValues, type FieldErrors } from './SchemaForm';
 import { clearDraft, getDraft, setDraft, subscribeDrafts } from './draftStore';
 import { mapLabelErrorsToFields as mapErrors } from './SchemaForm';
-import { useEffect } from 'react';
 import {
   Badge,
   Button,
@@ -103,6 +102,17 @@ function CommentDetail(props: {
     }
   };
 
+  // Ctrl/Cmd+S：与文章编辑器一致，四个面板都能手不离键盘保存（审计 P4）
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        if (!saving) void save();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
   const remove = async () => {
     try {
       await deleteContent('comments', props.document._id);

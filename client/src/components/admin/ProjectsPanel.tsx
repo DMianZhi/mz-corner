@@ -2,7 +2,7 @@
 //
 // 表单用 `key={doc._id}` 强制重挂载来重置内部状态 —— 比在 useEffect 里手动
 // 同步「选中项变了 → 重填表单」更不容易出错（AGENTS.md 也要求少用 effect）。
-import { useState, useSyncExternalStore } from 'react';
+import { useState, useSyncExternalStore, useEffect } from 'react';
 import { toast } from 'sonner';
 import {
   createContent,
@@ -97,6 +97,17 @@ function ProjectDetail(props: {
     }
   };
 
+  // Ctrl/Cmd+S：与文章编辑器一致，四个面板都能手不离键盘保存（审计 P4）
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        if (!saving) void save();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
   const remove = async () => {
     try {
       await deleteContent('projects', props.document._id);
