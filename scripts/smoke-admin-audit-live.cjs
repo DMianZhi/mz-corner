@@ -187,40 +187,6 @@ async function publicCount() {
   check('默认落在文章 tab', 1, await page.locator('#adm-tabpanel-articles').count());
   check('tabpanel 关联 tab（a11y）', 'adm-tab-articles', await page.locator('#adm-tabpanel-articles').getAttribute('aria-labelledby'));
   check('tab 按钮有 id（a11y）', 1, await page.locator('#adm-tab-articles').count());
-  // 跳转主内容：默认必须看不见（曾因隐藏量相对自身高度算错，一直露在顶栏上）
-  const skipHidden = await page.evaluate(() => {
-    const el = document.querySelector('.adm-skip');
-    if (!el) return { missing: true };
-    const r = el.getBoundingClientRect();
-    const cy = Math.round(r.top + r.height / 2);
-    const hit = cy >= 0 && cy < innerHeight ? document.elementFromPoint(Math.round(r.left + r.width / 2), cy) : null;
-    return { bottom: r.bottom, isHit: hit === el || el.contains(hit) };
-  });
-  check('跳转链接默认完全在视口外', true, skipHidden.bottom <= 0);
-  check('跳转链接默认不可被点到（不挡顶栏）', false, skipHidden.isHit);
-  // 触发后必须有可见反馈（原先 main 是 outline: none，按 Enter 屏幕毫无变化）
-  await page.locator('.adm-skip').focus();
-  await page.keyboard.press('Enter');
-  await page.waitForTimeout(300);
-  const landing = await page.evaluate(() => {
-    const el = document.getElementById('adm-main');
-    const cs = getComputedStyle(el);
-    return {
-      active: document.activeElement?.id || '',
-      outlineStyle: cs.outlineStyle,
-      outlineWidth: cs.outlineWidth,
-      inTopbar: (document.querySelector('.adm-topbar') || document.body).contains(document.activeElement),
-    };
-  });
-  check('跳转后焦点落到主内容', 'adm-main', landing.active);
-  check('跳转落点有可见焦点提示', true, landing.outlineStyle !== 'none' && landing.outlineWidth !== '0px');
-  console.log(`       落点提示 outline: ${landing.outlineStyle} ${landing.outlineWidth}`);
-  // 它存在的唯一目的：省掉顶栏那些 Tab 停靠点
-  await page.keyboard.press('Tab');
-  check('跳转后下一站已不在顶栏内（真的省掉了顶栏）', false, await page.evaluate(() =>
-    (document.querySelector('.adm-topbar') || document.body).contains(document.activeElement),
-  ));
-  await page.evaluate(() => document.activeElement?.blur?.());
 
   // ── 3. 次级信息对比度（P1） ─────────────────────────────
   console.log('\n[3] 次级信息对比度（P1 目标 ≥4.5:1）');

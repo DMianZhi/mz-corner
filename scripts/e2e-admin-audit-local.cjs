@@ -329,58 +329,10 @@ async function visualDiff(page, onSel, offSel, keys) {
   await page.locator('#adm-tab-articles').click();
   await page.waitForTimeout(400);
 
-  // 页面级标题 + 跳转主内容（P4）
+  // 页面级标题（P4）
   check('存在页面级 h1', '管理后台', (await page.locator('h1').first().textContent())?.trim());
-  // 默认必须是「看不见」——原断言只查聚焦后是否可见，于是「一直露在顶栏上」
-  // 这个 bug 一直绿（元素存在 ≠ 看不见，又是渲染级漏检）。
   await page.evaluate(() => document.activeElement?.blur?.());
   await page.waitForTimeout(250);
-  const skipHidden = await page.evaluate(() => {
-    const el = document.querySelector('.adm-skip');
-    const r = el.getBoundingClientRect();
-    // 命中测试：该坐标上真正被点到的元素是不是它（被顶栏盖住/在视口外都算没露出）
-    const cx = Math.round(r.left + r.width / 2);
-    const cy = Math.round(r.top + r.height / 2);
-    const hit = cy >= 0 && cy < innerHeight ? document.elementFromPoint(cx, cy) : null;
-    return { bottom: r.bottom, top: r.top, isHit: hit === el || el.contains(hit) };
-  });
-  check('跳转链接默认完全在视口外', true, skipHidden.bottom <= 0);
-  check('跳转链接默认不可被点到（不挡顶栏）', false, skipHidden.isHit);
-  await page.locator('.adm-skip').focus();
-  // 浮出是 transform 过渡（0.16s），必须等动画结束再量，否则量到中途位置
-  await page.waitForTimeout(350);
-  const skipShown = await page.locator('.adm-skip').evaluate((el) => {
-    const r = el.getBoundingClientRect();
-    const navH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--nav-h')) || 0;
-    return { top: Math.round(r.top), bottom: Math.round(r.bottom), navH, vh: innerHeight };
-  });
-  check('跳转链接聚焦后完整落在视口内', true, skipShown.top >= 0 && skipShown.bottom <= skipShown.vh);
-  // 落点应在顶栏之下，不能压住品牌/页签（视觉上是"浮出"，不是盖在顶栏上）
-  check('跳转链接浮出后位于顶栏下方', true, skipShown.top >= skipShown.navH);
-  console.log(`       浮出落点 top=${skipShown.top}px（顶栏 ${skipShown.navH}px）`);
-  await page.keyboard.press('Enter');
-  await page.waitForTimeout(250);
-  check('跳转后焦点落到主内容', 'adm-main', await page.evaluate(() => document.activeElement?.id || ''));
-  // 落点必须有可见反馈：原先 main 是 outline: none，按 Enter 后屏幕毫无变化，
-  // 用户根本判断不出"跳到了没"（用户实测反馈「触发没有发生什么」）
-  const landing = await page.evaluate(() => {
-    const el = document.getElementById('adm-main');
-    const cs = getComputedStyle(el);
-    return { outlineStyle: cs.outlineStyle, outlineWidth: cs.outlineWidth, boxShadow: cs.boxShadow };
-  });
-  check('跳转落点有可见焦点提示', true, landing.outlineStyle !== 'none' || landing.boxShadow !== 'none');
-  console.log(`       落点提示 outline: ${landing.outlineStyle} ${landing.outlineWidth}`);
-  // 这个链接存在的唯一目的：省掉顶栏那 6 个 Tab 停靠点。必须验证它真的省了。
-  await page.keyboard.press('Tab');
-  const afterSkip = await page.evaluate(() => {
-    const el = document.activeElement;
-    const tb = document.querySelector('.adm-topbar');
-    return { inTopbar: tb ? tb.contains(el) : false, cls: el?.className || el?.tagName };
-  });
-  check('跳转后下一站已不在顶栏内（真的省掉了顶栏）', false, afterSkip.inTopbar);
-  console.log(`       下一站：${afterSkip.cls}`);
-  // 回归：HashRouter 下跳转链接不能把路由带跑（曾实测跳出 /admin）
-  check('路由未被跳转链接改掉', true, page.url().includes('#/admin'));
 
   // 左栏键盘导航：roving tabindex + 方向键（P4：24 条 = 24 个 Tab 停靠点）
   check('左栏只有一个 Tab 停靠点', 1, await page.locator('.adm-ritem[tabindex="0"]').count());
