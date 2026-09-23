@@ -48,7 +48,8 @@
   --border-strong: rgba(255, 255, 255, 0.16);
   --text-1: #F5F5F4;
   --text-2: #A6A6AD;
-  --text-3: #5F5F66;
+  /* P1 审计修复：次级信息从 #5F5F66（3.12:1）提到达标（bg 5.06:1 / bg-raised 4.74:1） */
+  --text-3: #808089;
 
   /* 站点信号色（酸性黄绿） */
   --brand: #C8F542;
@@ -114,7 +115,8 @@ html.light {
   --border-strong: rgba(20, 20, 22, 0.2);
   --text-1: #141416;
   --text-2: #55555C;
-  --text-3: #9B9BA1;
+  /* P1 审计修复：次级信息从 #9B9BA1（2.40:1）提到达标（bg 4.65:1 / bg-raised 5.36:1） */
+  --text-3: #6A6A72;
   --brand: #6E9E06;
   --brand-ink: #FFFFFF;
   --brand-dim: rgba(110, 158, 6, 0.12);

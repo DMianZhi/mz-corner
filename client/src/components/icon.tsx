@@ -158,6 +158,17 @@ export function EyeIcon(props: IconProps) {
   );
 }
 
+/** 眼睛划线（口令隐藏态） */
+export function EyeOffIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M2 12s3.5-7 10-7c1.6 0 3 .34 4.32.86M22 12s-3.5 7-10 7c-1.62 0-3.05-.35-4.37-.88" />
+      <path d="M9.9 9.9a3 3 0 1 0 4.2 4.2" />
+      <path d="M3 3l18 18" />
+    </Svg>
+  );
+}
+
 /** 时钟 */
 export function ClockIcon(props: IconProps) {
   return (

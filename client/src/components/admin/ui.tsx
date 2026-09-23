@@ -5,7 +5,7 @@
 //   所以本文件**不出现任何颜色字面量**，明暗主题自动跟随
 // - 图标一律内联 SVG（stroke=currentColor），不用 emoji，也不用 × / ✕ 字形
 // - 遵循 client/AGENTS.md：单 props 参数 + 内联类型、不用 useMemo/useCallback
-import { useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
 /* ── 图标 ─────────────────────────────────────────────── */
 
@@ -80,6 +80,13 @@ export const Icon = {
     <Svg size={props.size}>
       <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
       <circle cx="12" cy="12" r="3" />
+    </Svg>
+  ),
+  EyeOff: (props: { size?: number }) => (
+    <Svg size={props.size}>
+      <path d="M4 4l16 16" />
+      <path d="M10.6 6.1A9.6 9.6 0 0 1 12 6c6.5 0 9.5 6 9.5 6a17.6 17.6 0 0 1-2.1 2.9M6.6 7.4A16.8 16.8 0 0 0 2.5 12S6 18 12 18c1.4 0 2.7-.3 3.8-.8" />
+      <path d="M9.9 10.2a3 3 0 0 0 4 4" />
     </Svg>
   ),
   Split: (props: { size?: number }) => (
@@ -165,6 +172,19 @@ export const Icon = {
   ),
 };
 
+/* ── 字段元信息（label/id/错误态 的关联通道）──────────────── */
+
+// FieldRow 生成唯一控件 id 与错误 id，通过 context 下发给里面的输入控件；
+// 控件拿不到 context（登录门等独立用法）时就退化为普通控件，可用显式 aria-label。
+// 解决审计 P4：抽查 5 个字段 0 个有关联 label —— 读屏用户听不到字段名。
+type FieldMeta = { id: string; hintId?: string; errorId?: string; invalid?: boolean };
+const FieldMetaContext = createContext<FieldMeta | null>(null);
+
+/** 读屏专用文本：视觉不占位，但能被辅助技术念出来 */
+export function SrOnly(props: { children: ReactNode }) {
+  return <span className="adm-sr">{props.children}</span>;
+}
+
 /* ── 按钮 ─────────────────────────────────────────────── */
 
 export function Button(props: {
@@ -178,6 +198,8 @@ export function Button(props: {
   title?: string;
   full?: boolean;
   type?: 'button' | 'submit';
+  /** 加载/请求进行中时对读屏声明 */
+  ariaBusy?: boolean;
 }) {
   const variant = props.variant ?? 'default';
   const className = [
@@ -197,6 +219,7 @@ export function Button(props: {
       title={props.title}
       onClick={props.onClick}
       disabled={props.disabled || props.loading}
+      aria-busy={props.loading || props.ariaBusy || undefined}
     >
       {props.loading ? <Icon.Spinner /> : props.icon}
       {props.children}
@@ -216,19 +239,56 @@ export function TextInput(props: {
   maxLength?: number;
   /** 口令类字段传 'password' 以掩码回显；不传即普通文本输入框 */
   type?: 'text' | 'password';
+  /** 数字字段拉起数字键盘（桌面无感，移动端必需） */
+  inputMode?: 'numeric' | 'decimal';
+  /** 登录门等无 FieldRow 包裹时的读屏名 */
+  ariaLabel?: string;
+  autoComplete?: string;
+  autoFocus?: boolean;
+  /** 口令框显隐切换：仅在 type="password" 时有意义（审计 P2-7） */
+  revealable?: boolean;
+  /** 字段名：落到控件的 data-field，保存失败时按它定位到具体字段（审计 P2-4） */
+  fieldName?: string;
 }) {
-  return (
+  const meta = useContext(FieldMetaContext);
+  const [revealed, setRevealed] = useState(false);
+  const wrapClass = 'adm-reveal';
+  const input = (
     <input
       className={['adm-input', props.monospace ? 'adm-input--mono' : '', props.big ? 'adm-input--title' : '']
         .filter(Boolean)
         .join(' ')}
-      type={props.type ?? 'text'}
+      type={props.revealable && revealed ? 'text' : (props.type ?? 'text')}
+
+      id={meta?.id}
+      data-field={props.fieldName}
+      aria-label={meta ? undefined : props.ariaLabel}
+      aria-invalid={meta?.invalid || undefined}
+      aria-describedby={meta?.errorId}
       value={props.value}
       placeholder={props.placeholder}
       disabled={props.disabled}
       maxLength={props.maxLength}
+      inputMode={props.inputMode}
+      autoComplete={props.autoComplete}
+      autoFocus={props.autoFocus}
       onChange={(event) => props.onChange(event.target.value)}
     />
+  );
+  if (!props.revealable) return input;
+  return (
+    <div className={wrapClass}>
+      {input}
+      <button
+        type="button"
+        className="adm-reveal-btn"
+        aria-label={revealed ? '隐藏口令' : '显示口令'}
+        aria-pressed={revealed}
+        onClick={() => setRevealed((v) => !v)}
+      >
+        {revealed ? <Icon.EyeOff size={16} /> : <Icon.Eye size={16} />}
+      </button>
+    </div>
   );
 }
 
@@ -239,12 +299,41 @@ export function TextArea(props: {
   monospace?: boolean;
   rows?: number;
   code?: boolean;
+  /** 随内容自动增减高度（文章编辑器与评论正文用） */
+  autoGrow?: boolean;
+  /** 外部滚动定位用（错误字段聚焦/滚动会拿到它） */
+  textareaRef?: React.Ref<HTMLTextAreaElement>;
+  /** 字段名：保存失败时按它定位到具体字段（审计 P2-4） */
+  fieldName?: string;
 }) {
+  const meta = useContext(FieldMetaContext);
+  const ref = useRef<HTMLTextAreaElement | null>(null);
+
+  // autoGrow：内容变化时把高度重置为滚动高度，短内容不浪费空间，长内容自然展开
+  useEffect(() => {
+    if (!props.autoGrow || !ref.current) return;
+    const el = ref.current;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight + 2}px`;
+  }, [props.value, props.autoGrow]);
+
   return (
     <textarea
+      ref={(node) => {
+        ref.current = node;
+        const external = props.textareaRef;
+        if (typeof external === 'function') external(node);
+        else if (external && typeof external === 'object') {
+          (external as React.MutableRefObject<HTMLTextAreaElement | null>).current = node;
+        }
+      }}
       className={['adm-textarea', props.monospace ? 'adm-input--mono' : '', props.code ? 'adm-textarea--code' : '']
         .filter(Boolean)
         .join(' ')}
+      id={meta?.id}
+      data-field={props.fieldName}
+      aria-invalid={meta?.invalid || undefined}
+      aria-describedby={[props.code ? `${meta?.id}-hint` : undefined, meta?.errorId].filter(Boolean).join(' ') || undefined}
       value={props.value}
       rows={props.rows}
       placeholder={props.placeholder}
@@ -258,11 +347,17 @@ export function Select(props: {
   value: string;
   options: Array<{ value: string; label: string }>;
   onChange: (value: string) => void;
+  fieldName?: string;
 }) {
+  const fieldMeta = useContext(FieldMetaContext);
   return (
     <span className="adm-select-wrap">
       <select
         className="adm-select"
+        id={fieldMeta?.id}
+        data-field={props.fieldName}
+        aria-invalid={fieldMeta?.invalid || undefined}
+        aria-describedby={fieldMeta?.errorId}
         value={props.value}
         onChange={(event) => props.onChange(event.target.value)}
       >
@@ -284,8 +379,10 @@ export function TagInput(props: {
   value: string[];
   onChange: (value: string[]) => void;
   placeholder?: string;
+  fieldName?: string;
 }) {
   const [draft, setDraft] = useState('');
+  const field = useContext(FieldMetaContext);
 
   const commit = () => {
     const parts = draft
@@ -300,7 +397,7 @@ export function TagInput(props: {
   };
 
   return (
-    <span className="adm-taginput">
+    <span className="adm-taginput" data-field={props.fieldName}>
       {props.value.map((tag) => (
         <span key={tag} className="adm-chip">
           {tag}
@@ -308,6 +405,7 @@ export function TagInput(props: {
             type="button"
             className="adm-chip-x"
             title={`移除 ${tag}`}
+            aria-label={`移除标签 ${tag}`}
             onClick={() => props.onChange(props.value.filter((item) => item !== tag))}
           >
             <svg width="10" height="10" viewBox="0 0 12 12" aria-hidden="true">
@@ -322,6 +420,9 @@ export function TagInput(props: {
         </span>
       ))}
       <input
+        id={field?.id}
+        aria-invalid={field?.invalid || undefined}
+        aria-describedby={field?.errorId}
         value={draft}
         placeholder={props.value.length === 0 ? props.placeholder : ''}
         onChange={(event) => {
@@ -350,9 +451,22 @@ export function TagInput(props: {
 
 export function Tabs<T extends string>(props: {
   value: T;
-  options: Array<{ value: T; label: string; count?: number }>;
+  options: Array<{ value: T; label: string; count?: number; panelId?: string }>;
   onChange: (value: T) => void;
 }) {
+  // 方向键切换（WAI-ARIA tabs 模式）：tablist 内 Tab 键只进一次，
+  // 左右箭头在四个标签间移动并选中 —— 读屏与键盘用户的预期行为。
+  const listRef = useRef<HTMLButtonElement | null>(null);
+  const move = (current: T, offset: 1 | -1) => {
+    const index = props.options.findIndex((option) => option.value === current);
+    if (index < 0) return;
+    const next = props.options[(index + offset + props.options.length) % props.options.length];
+    props.onChange(next.value);
+    // 焦点跟随选中项（roving tabindex 的简化版：始终只有一个可停靠点）
+    listRef.current
+      ?.querySelector<HTMLButtonElement>(`[data-tab="${next.value}"]`)
+      ?.focus();
+  };
   return (
     <nav className="adm-tabs" role="tablist">
       {props.options.map((option) => (
@@ -360,9 +474,22 @@ export function Tabs<T extends string>(props: {
           key={option.value}
           type="button"
           role="tab"
+          id={`adm-tab-${option.value}`}
+          data-tab={option.value}
           className="adm-tab"
           aria-selected={props.value === option.value}
+          aria-controls={option.panelId}
+          tabIndex={props.value === option.value ? 0 : -1}
           onClick={() => props.onChange(option.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'ArrowRight') {
+              event.preventDefault();
+              move(props.value, 1);
+            } else if (event.key === 'ArrowLeft') {
+              event.preventDefault();
+              move(props.value, -1);
+            }
+          }}
         >
           {option.label}
           {typeof option.count === 'number' ? (
@@ -381,6 +508,7 @@ export function Rail(props: {
   title: string;
   count: number;
   action?: ReactNode;
+  filter?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -391,35 +519,47 @@ export function Rail(props: {
         <span style={{ flex: 1 }} />
         {props.action}
       </div>
-      <div className="adm-rail-list">{props.children}</div>
+      {props.filter ? <div className="adm-rail-filter">{props.filter}</div> : null}
+      <div className="adm-rail-list" role="listbox" aria-label={`${props.title}列表`}>
+        {props.children}
+      </div>
     </aside>
   );
 }
 
 /**
- * 索引条目：序号 + 标题 + 状态点。
+ * 索引条目：序号 + 标题 + 状态点（+ 草稿点）。
  * 只有标题一行 —— 这是整块界面密度（一屏 18 行）的来源，加第二行会立刻变回列表页。
  * tone：on = 已启用（实心点）/ off = 未启用（空心点）/ warn = 需注意（实心点 + 变色标题）
+ * pending：这条有未保存草稿 —— 解决审计 P3：站点设置改了三项，左栏看不出哪几项欠着。
  */
 export function RailItem(props: {
   index: number;
   title: string;
   selected: boolean;
   tone?: 'on' | 'off' | 'warn';
+  pending?: boolean;
+  selectedOnEnter?: boolean;
   onSelect: () => void;
 }) {
   const tone = props.tone ?? 'on';
   return (
     <button
       type="button"
+      role="option"
       className={['adm-ritem', tone === 'warn' ? 'adm-ritem--warn' : ''].filter(Boolean).join(' ')}
-      aria-current={props.selected}
+      aria-selected={props.selected}
       title={props.title}
+      data-autofocus={props.selectedOnEnter && props.selected ? '' : undefined}
       onClick={props.onSelect}
     >
       <span className="adm-ritem-n">{String(props.index).padStart(2, '0')}</span>
       <span className="adm-ritem-t">{props.title}</span>
-      <span className={['adm-ritem-d', tone === 'off' ? 'adm-ritem-d--off' : ''].filter(Boolean).join(' ')} />
+      {props.pending ? <span className="adm-ritem-p" title="有未保存草稿" /> : null}
+      <span
+        className={['adm-ritem-d', tone === 'off' ? 'adm-ritem-d--off' : ''].filter(Boolean).join(' ')}
+        aria-hidden="true"
+      />
     </button>
   );
 }
@@ -436,29 +576,58 @@ export function Kicker(props: { num: string; label: string }) {
   );
 }
 
-/** 详情页字段行：左等宽标签 + 右控件，行间发丝线 */
+/**
+ * 详情页字段行：左等宽标签 + 右控件，行间发丝线。
+ * 生成唯一 id 并通过 context 下发给内部控件（label/htmlFor/aria-describedby 全接上）。
+ * error 传入时：标签与控件变红、控件 aria-invalid、错误文字挂到控件描述里 ——
+ * 解决审计 P2：服务端错误只进顶部 toast，不落到字段上。
+ */
+let fieldSeq = 0;
 export function FieldRow(props: {
   label: string;
   hint?: string;
   required?: boolean;
   top?: boolean;
+  error?: string;
+  /** 字段名：出错的整行滚动定位用（审计 P2-4） */
+  fieldName?: string;
   children: ReactNode;
 }) {
+  const [id] = useState(() => `adm-f-${++fieldSeq}`);
+  const hintId = props.hint ? `${id}-hint` : undefined;
+  const errorId = props.error ? `${id}-err` : undefined;
+  const meta: FieldMeta = { id, hintId, errorId, invalid: Boolean(props.error) };
   return (
-    <div className={['adm-fv', props.top ? 'adm-fv--top adm-fv--full' : ''].filter(Boolean).join(' ')}>
-      <span className="adm-fv-k">
-        {props.label}
-        {props.required ? <span className="adm-req"> *</span> : null}
-      </span>
-      <span className="adm-fv-v">
-        {props.children}
-        {props.hint ? (
-          <span className="adm-field-hint" style={{ display: 'block', marginTop: 6 }}>
-            {props.hint}
-          </span>
-        ) : null}
-      </span>
-    </div>
+    <FieldMetaContext value={meta}>
+      <div
+        data-field-row={props.fieldName}
+        className={[
+          'adm-fv',
+          props.top ? 'adm-fv--top adm-fv--full' : '',
+          props.error ? 'adm-fv--error' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
+        <label className="adm-fv-k" htmlFor={id}>
+          {props.label}
+          {props.required ? <span className="adm-req"> *</span> : null}
+        </label>
+        <span className="adm-fv-v">
+          {props.children}
+          {props.hint ? (
+            <span id={hintId} className="adm-field-hint" style={{ display: 'block', marginTop: 6 }}>
+              {props.hint}
+            </span>
+          ) : null}
+          {props.error ? (
+            <span id={errorId} className="adm-field-error" role="alert" style={{ display: 'block', marginTop: 6 }}>
+              {props.error}
+            </span>
+          ) : null}
+        </span>
+      </div>
+    </FieldMetaContext>
   );
 }
 
@@ -487,6 +656,7 @@ export function LinkButton(props: {
       className={['adm-link', props.tone === 'brand' ? 'adm-link--brand' : ''].filter(Boolean).join(' ')}
       title={props.title}
       disabled={props.disabled || props.loading}
+      aria-busy={props.loading || undefined}
       onClick={props.onClick}
     >
       {props.children}
@@ -528,13 +698,19 @@ export function DangerConfirm(props: {
   size?: 'sm' | 'md';
 }) {
   const [armed, setArmed] = useState(false);
-  const [timer, setTimer] = useState<number | null>(null);
+  const timerRef = useRef<number | null>(null);
+
+  // 卸载时清掉确认倒计时，避免回到列表后定时器还把状态改掉（对已卸载组件 setState）
+  useEffect(() => {
+    return () => {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    };
+  }, []);
 
   const arm = () => {
     setArmed(true);
-    if (timer !== null) window.clearTimeout(timer);
-    const handle = window.setTimeout(() => setArmed(false), 3000);
-    setTimer(handle);
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    timerRef.current = window.setTimeout(() => setArmed(false), 3000);
   };
 
   return (
@@ -544,7 +720,7 @@ export function DangerConfirm(props: {
       icon={props.icon ?? <Icon.Trash />}
       onClick={() => {
         if (armed) {
-          if (timer !== null) window.clearTimeout(timer);
+          if (timerRef.current !== null) window.clearTimeout(timerRef.current);
           setArmed(false);
           props.onConfirm();
           return;

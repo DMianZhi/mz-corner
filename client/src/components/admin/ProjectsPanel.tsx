@@ -2,7 +2,7 @@
 //
 // 表单用 `key={doc._id}` 强制重挂载来重置内部状态 —— 比在 useEffect 里手动
 // 同步「选中项变了 → 重填表单」更不容易出错（AGENTS.md 也要求少用 effect）。
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { toast } from 'sonner';
 import {
   createContent,
@@ -11,8 +11,10 @@ import {
   type ContentDocument,
   type ContentField,
 } from '@/services/admin-api';
-import { asText, emptyValues, SchemaForm } from './SchemaForm';
+import { asText, emptyValues, focusFirstError, SchemaForm, validateValues, type FieldErrors } from './SchemaForm';
 import { statusTone, StatusText } from './status';
+import { clearDraft, draftTotal, getDraft, setDraft, subscribeDrafts } from './draftStore';
+import { mapLabelErrorsToFields as mapErrors } from './SchemaForm';
 import {
   Badge,
   Button,
@@ -34,24 +36,46 @@ function ProjectDetail(props: {
   onDeleted: () => Promise<void>;
   onAuthLost: () => void;
 }) {
+  // 草稿优先：上次没保存就离开的项目，回到这里要能看到改动还在（审计 P0-1）
   const [values, setValues] = useState<Record<string, unknown>>(() => {
+    const draft = getDraft('projects', props.document._id);
+    if (draft) return draft.values;
     const initial: Record<string, unknown> = {};
     for (const field of props.fields) initial[field.name] = props.document[field.name];
     return initial;
   });
-  const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<FieldErrors>({});
+  // draftStore 变化时重渲（dirty 由此推导，RailItem 的草稿点也靠它）
+  useSyncExternalStore(subscribeDrafts, draftTotal);
 
+  const dirty = getDraft('projects', props.document._id) !== null;
+
+  // 副作用留在 updater 之外：updater 在渲染期执行，里面写草稿会同步通知订阅方改状态
   const update = (name: string, value: unknown) => {
-    setValues((current) => ({ ...current, [name]: value }));
-    setDirty(true);
+    const next = { ...values, [name]: value };
+    setValues(next);
+    setDraft('projects', props.document._id, next);
+    if (name in errors) {
+      const cleared: FieldErrors = { ...errors };
+      delete cleared[name];
+      setErrors(cleared);
+    }
   };
 
   const save = async () => {
+    const clientErrors = validateValues(props.fields, values);
+    if (Object.keys(clientErrors).length > 0) {
+      setErrors(clientErrors);
+      focusFirstError(props.fields, clientErrors);
+      toast.error('有字段需要修正');
+      return;
+    }
     setSaving(true);
     try {
       await updateContent('projects', props.document._id, values);
-      setDirty(false);
+      clearDraft('projects', props.document._id);
+      setErrors({});
       toast.success('已保存');
       await props.onSaved();
     } catch (error) {
@@ -59,7 +83,14 @@ function ProjectDetail(props: {
         props.onAuthLost();
         return;
       }
-      toast.error(error instanceof Error ? error.message : '保存失败');
+      const message = error instanceof Error ? error.message : '保存失败';
+      const fieldErrors = mapErrors(props.fields, message);
+      if (fieldErrors) {
+        setErrors(fieldErrors);
+        toast.error('有字段需要修正');
+      } else {
+        toast.error(message);
+      }
     } finally {
       setSaving(false);
     }
@@ -117,6 +148,7 @@ function ProjectDetail(props: {
         fields={props.fields}
         values={values}
         onChange={update}
+        errors={errors}
         exclude={['name']}
       />
 

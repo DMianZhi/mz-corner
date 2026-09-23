@@ -13,7 +13,10 @@ import {
   type ContentDocument,
   type ContentField,
 } from '@/services/admin-api';
-import { asText, SchemaForm } from './SchemaForm';
+import { asText, focusFirstError, SchemaForm, validateValues, type FieldErrors } from './SchemaForm';
+import { clearDraft, getDraft, setDraft, subscribeDrafts } from './draftStore';
+import { mapLabelErrorsToFields as mapErrors } from './SchemaForm';
+import { useEffect } from 'react';
 import {
   Badge,
   Button,
@@ -37,23 +40,48 @@ function CommentDetail(props: {
   onAuthLost: () => void;
 }) {
   const [values, setValues] = useState<Record<string, unknown>>(() => {
-    const initial: Record<string, unknown> = {};
-    for (const field of props.fields) initial[field.name] = props.document[field.name];
-    return initial;
+    // 草稿优先（P0-1）：上次没保存就离开时，恢复它而不是静默显示已保存值
+    const draft = getDraft('comments', props.document._id);
+    const base: Record<string, unknown> = {};
+    for (const field of props.fields) base[field.name] = props.document[field.name];
+    return draft ? draft.values : base;
   });
-  const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<FieldErrors>({});
+  // draftStore 变化时重渲（dirty 由此推导，RailItem 的草稿点也靠它）
+  const [, forceRender] = useState(0);
+  useEffect(() => subscribeDrafts(() => forceRender((n) => n + 1)), []);
 
+
+  // dirty 从草稿推导（订阅在上面）；本地保存后 clearDraft 自动复位
+  const dirty = getDraft('comments', props.document._id) !== null;
+
+  // 副作用留在 updater 之外：updater 在 React 渲染期执行，里面写草稿会同步通知订阅方改状态
   const update = (name: string, value: unknown) => {
-    setValues((current) => ({ ...current, [name]: value }));
-    setDirty(true);
+    const next = { ...values, [name]: value };
+    setValues(next);
+    setDraft('comments', props.document._id, next);
+    if (name in errors) {
+      const cleared: FieldErrors = { ...errors };
+      delete cleared[name];
+      setErrors(cleared);
+    }
   };
 
   const save = async () => {
+    // 客户端先行校验；服务端错误按 label 映射到字段（P2-4）
+    const clientErrors = validateValues(props.fields, values);
+    if (Object.keys(clientErrors).length > 0) {
+      setErrors(clientErrors);
+      focusFirstError(props.fields, clientErrors);
+      toast.error('有字段需要修正');
+      return;
+    }
     setSaving(true);
     try {
       await updateContent('comments', props.document._id, values);
-      setDirty(false);
+      clearDraft('comments', props.document._id);
+      setErrors({});
       toast.success('已保存');
       await props.onSaved();
     } catch (error) {
@@ -61,7 +89,15 @@ function CommentDetail(props: {
         props.onAuthLost();
         return;
       }
-      toast.error(error instanceof Error ? error.message : '保存失败');
+      const message = error instanceof Error ? error.message : '保存失败';
+      const labelErrors = mapErrors(props.fields, message);
+      if (labelErrors) {
+        setErrors(labelErrors);
+        focusFirstError(props.fields, labelErrors);
+        toast.error('有字段需要修正');
+      } else {
+        toast.error(message);
+      }
     } finally {
       setSaving(false);
     }
@@ -125,6 +161,7 @@ function CommentDetail(props: {
       <SchemaForm
         fields={props.fields}
         values={values}
+        errors={errors}
         onChange={update}
         exclude={['author', 'articleId']}
       />

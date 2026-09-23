@@ -9,6 +9,7 @@
 // 因此配色与前台完全同源，明暗主题跟随 html.light 自动切换。
 import '@/styles/admin.css';
 import { useEffect, useState } from 'react';
+import { draftTotal, subscribeDrafts } from '@/components/admin/draftStore';
 import { toast } from 'sonner';
 import { ArticlesPanel } from '@/components/admin/ArticlesPanel';
 import { CommentsPanel } from '@/components/admin/CommentsPanel';
@@ -16,6 +17,7 @@ import { ProjectsPanel } from '@/components/admin/ProjectsPanel';
 import { SiteConfigPanel } from '@/components/admin/SiteConfigPanel';
 import { asText } from '@/components/admin/SchemaForm';
 import {
+  Badge,
   Button,
   EmptyState,
   Icon,
@@ -98,7 +100,7 @@ function LoginGate(props: { onOk: () => void }) {
             void submit();
           }}
         >
-          <TextInput value={pwd} onChange={setPwd} placeholder="管理口令" disabled={busy} type="password" />
+          <TextInput value={pwd} onChange={setPwd} placeholder="管理口令" disabled={busy} type="password" autoComplete="current-password" autoFocus revealable ariaLabel="管理口令" />
           {error ? (
             <div className="adm-field-error" style={{ marginTop: 8 }}>
               {error}
@@ -130,6 +132,25 @@ export default function AdminPage() {
     void bootstrap();
     // 仅在挂载时探测一次会话
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 未保存草稿计数（顶栏徽标）：draftStore 变化即刷新
+  const [pendingCount, setPendingCount] = useState(draftTotal());
+  useEffect(() => {
+    setPendingCount(draftTotal());
+    return subscribeDrafts(() => setPendingCount(draftTotal()));
+  }, []);
+
+  // 关闭/刷新标签页前的最后防线（P0-1）：有草稿时让浏览器先问一句。
+  // 注意这只兜「整个页面要没了」；站内切换由各面板的草稿层保住。
+  useEffect(() => {
+    const guard = (event: BeforeUnloadEvent) => {
+      if (draftTotal() === 0) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', guard);
+    return () => window.removeEventListener('beforeunload', guard);
   }, []);
 
   const loadAll = async () => {
@@ -237,14 +258,20 @@ export default function AdminPage() {
           <span className="adm-brand-text">管理后台</span>
         </div>
 
+        {pendingCount > 0 ? (
+          <span title={`${pendingCount} 处改动未保存，站内切换不会丢失，关闭标签页前请先保存`}>
+            <Badge tone="brand">{pendingCount} 未保存</Badge>
+          </span>
+        ) : null}
+
         <Tabs<TabKey>
           value={tab}
           onChange={setTab}
           options={[
-            { value: 'articles', label: '文章', count: counts.articles },
-            { value: 'projects', label: '项目', count: counts.projects },
-            { value: 'comments', label: '评论', count: counts.comments },
-            { value: 'site_config', label: '站点设置', count: counts.site_config },
+            { value: 'articles', label: '文章', count: counts.articles, panelId: 'adm-tabpanel-articles' },
+            { value: 'projects', label: '项目', count: counts.projects, panelId: 'adm-tabpanel-projects' },
+            { value: 'comments', label: '评论', count: counts.comments, panelId: 'adm-tabpanel-comments' },
+            { value: 'site_config', label: '站点设置', count: counts.site_config, panelId: 'adm-tabpanel-site_config' },
           ]}
         />
 
@@ -296,24 +323,29 @@ export default function AdminPage() {
       ) : null}
 
       {tab === 'articles' ? (
+        <div id={`adm-tabpanel-${tab}`} role="tabpanel" aria-labelledby={`adm-tab-${tab}`} className="adm-tabpanel">
         <ArticlesPanel
           fields={fieldsOf('articles')}
           documents={articles}
           onReload={() => reload('articles')}
           onAuthLost={authLost}
         />
+        </div>
       ) : null}
 
       {tab === 'projects' ? (
+        <div id={`adm-tabpanel-${tab}`} role="tabpanel" aria-labelledby={`adm-tab-${tab}`} className="adm-tabpanel">
         <ProjectsPanel
           fields={fieldsOf('projects')}
           documents={projects}
           onReload={() => reload('projects')}
           onAuthLost={authLost}
         />
+        </div>
       ) : null}
 
       {tab === 'comments' ? (
+        <div id={`adm-tabpanel-${tab}`} role="tabpanel" aria-labelledby={`adm-tab-${tab}`} className="adm-tabpanel">
         <CommentsPanel
           fields={fieldsOf('comments')}
           documents={comments}
@@ -321,15 +353,18 @@ export default function AdminPage() {
           onReload={() => reload('comments')}
           onAuthLost={authLost}
         />
+        </div>
       ) : null}
 
       {tab === 'site_config' ? (
+        <div id={`adm-tabpanel-${tab}`} role="tabpanel" aria-labelledby={`adm-tab-${tab}`} className="adm-tabpanel">
         <SiteConfigPanel
           fields={fieldsOf('site_config')}
           documents={config}
           onReload={() => reload('site_config')}
           onAuthLost={authLost}
         />
+        </div>
       ) : null}
     </div>
   );

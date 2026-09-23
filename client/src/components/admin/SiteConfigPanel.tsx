@@ -1,17 +1,36 @@
 // 站点设置面板：左索引（按分组排序的配置项）+ 右详情。
 //
 // site_config 在库里是若干条 key-value 文档（key/value/group/description），
-// 天然适合做成「索引 + 详情」。但保存仍走**集合级批量**：用户的心智是
+// 天然适合做成「索引 + 详情」。但保存走**集合级批量**：用户的心智是
 // 「改完几项一起保存」，逐条 PATCH 会产生 N 次请求，中途失败还会留下
 // 「改了一半」的状态。
 //
-// drafts 因此按 _id 存**部分字段**（{ [docId]: { value, description, ... } }），
-// 未改动的字段不进请求体，减少无谓写入。
-import { useState } from 'react';
+// 本轮（UX 审计修复）：
+// - 草稿接入 draftStore（P0-1）：改一半切标签/刷新不再丢，索引栏带未保存点（P3）
+// - 「键名」加快名提示（P0-3）：前台按 key 读值，改名会让旧 key 静默失联
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { bulkUpdateContent, type ContentDocument, type ContentField } from '@/services/admin-api';
 import { asText } from './SchemaForm';
-import { Badge, Button, EmptyState, FieldRow, FieldValue, Icon, Kicker, Rail, RailItem, TextArea, TextInput } from './ui';
+import {
+  clearDraft,
+  getDraft,
+  setDraft,
+  subscribeDrafts,
+} from './draftStore';
+import {
+  Badge,
+  Button,
+  EmptyState,
+  FieldRow,
+  FieldValue,
+  Icon,
+  Kicker,
+  Rail,
+  RailItem,
+  TextArea,
+  TextInput,
+} from './ui';
 
 /** 多行值的键名：这些 key 用文本域，其余用单行输入 */
 const LONG_KEYS = new Set(['bio', 'footer_note']);
@@ -22,9 +41,11 @@ export function SiteConfigPanel(props: {
   onReload: () => Promise<void>;
   onAuthLost: () => void;
 }) {
-  const [drafts, setDrafts] = useState<Record<string, Record<string, unknown>>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // draftStore 变化时重渲（未保存点与「N 项待保存」都从草稿推导）
+  const [, forceRender] = useState(0);
+  useEffect(() => subscribeDrafts(() => forceRender((n) => n + 1)), []);
 
   // 按分组聚拢，组内按键名排序：索引栏读起来像一份目录，而不是随机顺序
   const ordered = [...props.documents].sort((a, b) => {
@@ -34,17 +55,24 @@ export function SiteConfigPanel(props: {
     return asText(a.key).localeCompare(asText(b.key));
   });
 
-  // 未选中时默认落到第一条：切标签后右栏不该是一片空白（demo B 的行为）
+  // 未选中时默认落到第一条：切标签后右栏不该是一片空白
   const selected = ordered.find((doc) => doc._id === selectedId) ?? ordered[0] ?? null;
-  const changedIds = Object.keys(drafts);
+
+  // 草稿从 draftStore 读：有草稿的项即「已改动」项
+  const draftOf = (docId: string): Record<string, unknown> =>
+    getDraft('site_config', docId)?.values ?? {};
+  const changedIds = ordered.filter((doc) => getDraft('site_config', doc._id) !== null).map((doc) => doc._id);
 
   const fieldOf = (doc: ContentDocument, name: string): string =>
-    drafts[doc._id] && name in drafts[doc._id]
-      ? asText(drafts[doc._id][name])
-      : asText(doc[name]);
+    name in draftOf(doc._id) ? asText(draftOf(doc._id)[name]) : asText(doc[name]);
 
   const setField = (doc: ContentDocument, name: string, value: string) => {
-    setDrafts((prev) => ({ ...prev, [doc._id]: { ...prev[doc._id], [name]: value } }));
+    const next = { ...draftOf(doc._id), [name]: value };
+    setDraft('site_config', doc._id, next);
+  };
+
+  const discardAll = () => {
+    for (const id of changedIds) clearDraft('site_config', id);
   };
 
   const save = async () => {
@@ -53,9 +81,9 @@ export function SiteConfigPanel(props: {
     try {
       const updated = await bulkUpdateContent(
         'site_config',
-        changedIds.map((id) => ({ _id: id, ...drafts[id] })),
+        changedIds.map((id) => ({ _id: id, ...draftOf(id) })),
       );
-      setDrafts({});
+      for (const id of changedIds) clearDraft('site_config', id);
       toast.success(`已保存 ${updated} 项设置`);
       await props.onReload();
     } catch (error) {
@@ -77,9 +105,10 @@ export function SiteConfigPanel(props: {
             key={doc._id}
             index={index + 1}
             title={asText(doc.description) || asText(doc.key) || '(未命名) '}
-            selected={doc._id === selectedId}
+            selected={doc._id === selected?._id}
             // 空值 = 这一项还没配，空心点比「有值」更值得一眼看出
-            tone={asText(doc.value) ? 'on' : 'off'}
+            tone={fieldOf(doc, 'value') ? 'on' : 'off'}
+            pending={getDraft('site_config', doc._id) !== null}
             onSelect={() => setSelectedId(doc._id)}
           />
         ))}
@@ -100,10 +129,10 @@ export function SiteConfigPanel(props: {
             <div className="adm-dmeta">
               <span>{fieldOf(selected, 'key')}</span>
               <span>{fieldOf(selected, 'group') || '未分组'}</span>
-              <span style={{ color: asText(selected.value) ? undefined : 'var(--brand)' }}>
-                {asText(selected.value) ? '已设置' : '未设置'}
+              <span style={{ color: fieldOf(selected, 'value') ? undefined : 'var(--brand)' }}>
+                {fieldOf(selected, 'value') ? '已设置' : '未设置'}
               </span>
-              {drafts[selected._id] ? <Badge tone="brand">未保存</Badge> : null}
+              {getDraft('site_config', selected._id) ? <Badge tone="brand">未保存</Badge> : null}
             </div>
 
             <div className="adm-sec">
@@ -126,7 +155,12 @@ export function SiteConfigPanel(props: {
                   />
                 )}
               </FieldRow>
-              <FieldRow label="键名">
+              {/* P0-3：前台按 key 读值，改键名 = 前台该处静默失联。hint 而非禁用：
+                  确有迁移场景，但必须让人在按下保存前知道后果 */}
+              <FieldRow
+                label="键名"
+                hint="站点前台按键名读取配置；修改后原键将失效，前台对应位置会显示为空。"
+              >
                 <TextInput
                   value={fieldOf(selected, 'key')}
                   monospace
@@ -153,12 +187,7 @@ export function SiteConfigPanel(props: {
                 {changedIds.length > 0 ? `${changedIds.length} 项待保存` : '没有改动'}
               </span>
               <span style={{ flex: 1 }} />
-              <Button
-                size="sm"
-                variant="quiet"
-                disabled={changedIds.length === 0}
-                onClick={() => setDrafts({})}
-              >
+              <Button size="sm" variant="quiet" disabled={changedIds.length === 0} onClick={discardAll}>
                 放弃改动
               </Button>
               <Button
