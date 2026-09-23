@@ -126,6 +126,10 @@ function check(name, expected, actual) {
   const lightTab = await contrastOf('[data-tab="projects"]');
   console.log(`       亮色 .adm-tab → ${lightTab.color}，对比度 ${lightTab.ratio}`);
   check('亮色对比度 ≥4.5', true, lightTab.ratio >= 4.5);
+  // 品牌色作「文本/链接」的对比度（P1 剩余项：原 #6E9E06 只有 2.78:1）
+  const lightBrand = await contrastOf('.adm-link--brand');
+  console.log(`       亮色品牌链接 → ${lightBrand.color}，对比度 ${lightBrand.ratio}`);
+  check('亮色品牌链接 ≥4.5', true, lightBrand.ratio >= 4.5);
   await page.screenshot({ path: `${OUT}/audit-local-light.png` });
   await page.evaluate(() => {
     localStorage.setItem('theme', 'dark');
@@ -215,10 +219,21 @@ function check(name, expected, actual) {
   console.log('\n[8] 删除两步确认');
   await page.locator('[data-tab="articles"]').click();
   await page.waitForTimeout(500);
+  // 自建一条再删：早期版本直接删左栏第 2 条，删掉的是 fixture 文章，
+  // 把假库从 3 条改成 2 条，污染了之后跑的内容 API 套件（实测踩过：文章条数 3≠2）。
+  // 现在自己造、自己删，跑完假库回到原样。
+  const baseline = await apiCount('articles');
+  await page.locator('.adm-link:has-text("新建")').first().click();
+  await page.waitForTimeout(300);
+  await page.locator('.adm-input--title').fill('E2E 待删除文章');
+  await page.waitForTimeout(200);
+  await page.locator('.adm-btn:has-text("保存")').first().click();
+  await page.waitForTimeout(1200);
+  check('自建一条供删除', baseline + 1, await apiCount('articles'));
+  await page.locator('.adm-ritem:has-text("E2E 待删除文章")').first().click();
+  await page.waitForTimeout(400);
   const items = page.locator('.adm-ritem');
   const beforeDelete = await apiCount('articles');
-  await items.nth(1).click();
-  await page.waitForTimeout(400);
   const delBtn = page.locator('.adm-btn--danger:has-text("删除")').first();
   await delBtn.click();
   await page.waitForTimeout(200);
@@ -238,6 +253,140 @@ function check(name, expected, actual) {
   check('二次确认后库内减少 1 条', beforeDelete - 1, await apiCount('articles'));
   check('删除请求已发出', true, writes.length > writesBeforeDelete);
   check('删除后回到空态或下一篇文章', true, (await page.locator('.adm-ritem').count()) === beforeDelete - 1);
+
+  // ── 10. 第二轮补漏：语义 / 键盘 / 一致性 ───────────────
+  console.log('\n[10] 第二轮补漏');
+  await page.locator('#adm-tab-articles').click();
+  await page.waitForTimeout(400);
+
+  // 页面级标题 + 跳转主内容（P4）
+  check('存在页面级 h1', '管理后台', (await page.locator('h1').first().textContent())?.trim());
+  await page.locator('.adm-skip').focus();
+  const skipTop = await page.locator('.adm-skip').evaluate((el) => el.getBoundingClientRect().top);
+  check('跳转链接聚焦后浮出视口', true, skipTop >= 0);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(250);
+  check('跳转后焦点落到主内容', 'adm-main', await page.evaluate(() => document.activeElement?.id || ''));
+  // 回归：HashRouter 下跳转链接不能把路由带跑（曾实测跳出 /admin）
+  check('路由未被跳转链接改掉', true, page.url().includes('#/admin'));
+
+  // 左栏键盘导航：roving tabindex + 方向键（P4：24 条 = 24 个 Tab 停靠点）
+  check('左栏只有一个 Tab 停靠点', 1, await page.locator('.adm-ritem[tabindex="0"]').count());
+  const railCount = await page.locator('.adm-ritem').count();
+  const firstTitle = (await page.locator('.adm-ritem-t').first().textContent())?.trim();
+  await page.locator('.adm-ritem').first().focus();
+  await page.keyboard.press('ArrowDown');
+  await page.waitForTimeout(350);
+  const secondTitle = (await page.locator('.adm-ritem-t').nth(1).textContent())?.trim();
+  check('↓ 移动到第 2 条并选中', secondTitle, (await page.locator('.adm-ritem[aria-selected="true"] .adm-ritem-t').first().textContent())?.trim());
+  check('焦点跟随条目', true, await page.evaluate(() => document.activeElement?.classList.contains('adm-ritem')));
+  await page.keyboard.press('End');
+  await page.waitForTimeout(350);
+  check('End 跳到末条', railCount, await page.evaluate(() => Array.from(document.querySelectorAll('.adm-ritem')).findIndex((el) => el.getAttribute('aria-selected') === 'true') + 1));
+  await page.keyboard.press('Home');
+  await page.waitForTimeout(350);
+  check('Home 回到首条', firstTitle, (await page.locator('.adm-ritem[aria-selected="true"] .adm-ritem-t').first().textContent())?.trim());
+
+  // 文章排序（P3-8）：左栏顺序 == 发布日期倒序
+  const railTitles = (await page.locator('.adm-ritem-t').allTextContents()).map((t) => t.trim());
+  const expectedOrder = await page.evaluate(async () => {
+    const r = await fetch('/api/admin/content/articles');
+    const j = await r.json();
+    return (j.data?.items ?? [])
+      .slice()
+      .sort((a, b) => {
+        const da = String(a.publishDate || '');
+        const db = String(b.publishDate || '');
+        if (da !== db) return db.localeCompare(da);
+        return String(b._id || '').localeCompare(String(a._id || ''));
+      })
+      .map((d) => String(d.title || '（未命名）').trim());
+  });
+  check('索引顺序 == 发布日期倒序', JSON.stringify(expectedOrder), JSON.stringify(railTitles));
+
+  // 初始高亮（P3-7）：切到评论/项目后，恰好一条亮着
+  await page.locator('#adm-tab-comments').click();
+  await page.waitForTimeout(400);
+  check('评论首屏恰好 1 条高亮', 1, await page.locator('.adm-ritem[aria-selected="true"]').count());
+  await page.locator('#adm-tab-projects').click();
+  await page.waitForTimeout(400);
+  check('项目首屏恰好 1 条高亮', 1, await page.locator('.adm-ritem[aria-selected="true"]').count());
+
+  // 站点设置：保存入口统一成浮动 dock（P4）
+  await page.locator('#adm-tab-site_config').click();
+  await page.waitForTimeout(400);
+  check('站点设置保存入口是 dock', 1, await page.locator('.adm-dock:has-text("保存全部")').count());
+  check('旧吸附条已移除', 0, await page.locator('.adm-sticky-bar').count());
+
+  // 新建自动聚焦标题（P0-2 补漏）
+  await page.locator('#adm-tab-articles').click();
+  await page.waitForTimeout(300);
+  await page.locator('.adm-link:has-text("新建")').first().click();
+  await page.waitForTimeout(700);
+  const focusedClass = await page.evaluate(() => document.activeElement?.className || '');
+  check('新建后焦点落在标题框', true, focusedClass.includes('adm-input--title'));
+  // 本地草稿只有「放弃」没有「删除」——先放弃草稿、选中一篇真实文章再量命中区
+  await page.locator('.adm-dock .adm-link:has-text("放弃")').first().click();
+  await page.waitForTimeout(500);
+  await page.locator('.adm-ritem').first().click();
+  await page.waitForTimeout(700);
+
+  // 危险动作命中区（P4：原 16×16）
+  const dangerBox = await page.locator('.adm-btn--danger').first().boundingBox();
+  console.log(`       删除按钮命中区 ${Math.round(dangerBox.width)}×${Math.round(dangerBox.height)}`);
+  check('删除按钮命中区 ≥24×24', true, dangerBox.width >= 24 && dangerBox.height >= 24);
+
+  // 标签 × 命中区（P4：审计实测视觉 16×16 / 图标 10px）
+  let chipHit = null;
+  const railN = await page.locator('.adm-ritem').count();
+  for (let i = 0; i < railN && !chipHit; i += 1) {
+    await page.locator('.adm-ritem').nth(i).click();
+    await page.waitForTimeout(500);
+    chipHit = await page.evaluate(() => {
+      const el = document.querySelector('.adm-chip-x');
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      const hit = (x, y) => document.elementFromPoint(x, y) === el;
+      return {
+        visual: Math.round(r.width) + '×' + Math.round(r.height),
+        left: hit(r.left - 4, r.top + r.height / 2),
+        right: hit(r.right + 4, r.top + r.height / 2),
+        top: hit(r.left + r.width / 2, r.top - 4),
+        bottom: hit(r.left + r.width / 2, r.bottom + 4),
+      };
+    });
+  }
+  console.log(`       标签 × 视觉 ${chipHit ? chipHit.visual : '未找到'}，热区外扩 4px 命中：${chipHit ? [chipHit.left, chipHit.right, chipHit.top, chipHit.bottom].join('/') : '-'}`);
+  check('标签 × 热区已扩到 24×24', true, Boolean(chipHit) && chipHit.left && chipHit.right && chipHit.top && chipHit.bottom);
+
+  // 窄屏 900×784（P4：索引条 298px、dock 盖住整行字段）
+  await page.setViewportSize({ width: 900, height: 784 });
+  await page.waitForTimeout(500);
+  const railBox = await page.locator('.adm-rail').boundingBox();
+  const dockBox = await page.locator('.adm-dock').first().boundingBox();
+  console.log(`       900px 索引条高 ${Math.round(railBox.height)}px，dock 底边 ${Math.round(dockBox.y + dockBox.height)}px`);
+  check('窄屏索引条 ≤220px', true, railBox.height <= 220);
+  check('窄屏 dock 未溢出视口', true, dockBox.y + dockBox.height <= 784 && dockBox.x >= 0 && dockBox.x + dockBox.width <= 900);
+  // dock 不该换行（fixed + left:50% 时可用宽度只剩一半，曾实测被挤成两行）
+  check('窄屏 dock 保持单行', true, dockBox.height <= 48);
+  // 滚到底后，最后一个字段不应藏在 dock 后面（detail 的 padding-bottom 是否够）
+  await page.evaluate(() => {
+    const pane = document.querySelector('.adm-pane');
+    if (pane) pane.scrollTop = pane.scrollHeight;
+    window.scrollTo(0, document.body.scrollHeight);
+  });
+  await page.waitForTimeout(500);
+  const cover = await page.evaluate(() => {
+    const dock = document.querySelector('.adm-dock').getBoundingClientRect();
+    const rows = Array.from(document.querySelectorAll('.adm-detail .adm-fv'));
+    const last = rows[rows.length - 1];
+    return { dockTop: Math.round(dock.top), lastBottom: last ? Math.round(last.getBoundingClientRect().bottom) : -1 };
+  });
+  console.log(`       滚到底：末字段底 ${cover.lastBottom}px，dock 顶 ${cover.dockTop}px`);
+  check('滚到底末字段未被 dock 遮挡', true, cover.lastBottom <= cover.dockTop);
+  await page.screenshot({ path: `${OUT}/audit-local-900.png` });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.waitForTimeout(300);
 
   // ── 9. 控制台零错误 ────────────────────────────────────
   console.log('\n[9] 控制台');

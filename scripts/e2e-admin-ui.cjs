@@ -144,11 +144,11 @@ function check(name, expected, actual) {
 
   await clickDock('分屏');
   await page.waitForSelector('.adm-preview', { timeout: 10000 });
-  check('分屏态 = 编辑器 + 预览并存', 1, await page.locator('.adm-pane-input').count());
+  check('分屏态 = 编辑器 + 预览并存', 1, await page.locator('.adm-split .adm-textarea').count());
   // 切到分屏必须把正文带到视野里，否则「点了分屏却只看到表单」
   const splitView = await page.evaluate(() => {
     const pane = document.querySelector('.adm-pane');
-    const ta = document.querySelector('.adm-pane-input');
+    const ta = document.querySelector('.adm-split .adm-textarea');
     return { paneScrollTop: Math.round(pane.scrollTop), taTop: Math.round(ta.getBoundingClientRect().top), winH: window.innerHeight };
   });
   check('分屏态：容器已滚到正文区', true, splitView.paneScrollTop > 100);
@@ -167,7 +167,7 @@ function check(name, expected, actual) {
   check(
     '预览态 = 只剩预览',
     '0/1',
-    `${await page.locator('.adm-pane-input').count()}/${await page.locator('.adm-preview').count()}`,
+    `${await page.locator('.adm-split .adm-textarea').count()}/${await page.locator('.adm-preview').count()}`,
   );
   const previewW = await page.evaluate(() => {
     const el = document.querySelector('.adm-detail');
@@ -221,7 +221,7 @@ function check(name, expected, actual) {
   await page.locator('.adm-ritem').first().click();
   await page.waitForTimeout(400);
   check('站点设置详情有字段行', true, (await page.locator('.adm-fv').count()) >= 3);
-  check('站点设置贴底保存条在位', 1, await page.locator('.adm-sticky-bar').count());
+  check('站点设置保存入口已并入浮动 dock', 1, await page.locator('.adm-dock:has-text("保存全部")').count());
 
   console.log('\n── 6. 浅色主题 ─────────────────────────────');
   await page.click('button[aria-label="切换主题"]');
@@ -271,7 +271,9 @@ function check(name, expected, actual) {
 
   console.log('\n── 8. 控制台洁净度 ─────────────────────────');
   // 未登录时探测会话、以及本轮故意输错口令，这两个端点回 401 是设计行为
-  const expected401 = /^\/mz-api\/api\/admin\/(session|login)$/;
+  // 页面侧看到的路径不带 /mz-api 前缀（那是 dev 代理转发时加的）。旧正则只匹配带前缀的，
+  // 所以这个过滤一直空转，401 每次都被当成真错误（P4 顺手修）
+  const expected401 = /^(\/mz-api)?\/api\/admin\/(session|login)$/;
   const unexpected401 = unauthorizedPaths.filter((p) => !expected401.test(p));
   check('401 只出现在会话探测/登录端点', 0, unexpected401.length);
 

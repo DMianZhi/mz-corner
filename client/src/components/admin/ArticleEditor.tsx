@@ -32,7 +32,18 @@ import {
 } from './SchemaForm';
 import { StatusText } from './status';
 import { draftStore } from './draftStore';
-import { Badge, Button, DangerConfirm, FieldValue, Icon, Kicker, LinkButton, TextArea, TextInput } from './ui';
+import {
+  Badge,
+  Button,
+  DangerConfirm,
+  FieldValue,
+  fitTextarea,
+  Icon,
+  Kicker,
+  LinkButton,
+  TextArea,
+  TextInput,
+} from './ui';
 
 type EditorMode = 'edit' | 'split' | 'preview';
 
@@ -102,7 +113,7 @@ export function ArticleEditor(props: {
     if (Object.keys(clientErrors).length > 0) {
       setErrors(clientErrors);
       focusFirstError(props.fields, clientErrors);
-      toast.error('有字段需要修正');
+      toast.error(`保存失败，有 ${Object.keys(clientErrors).length} 处需要修正`);
       return;
     }
     setSaving(true);
@@ -129,7 +140,7 @@ export function ArticleEditor(props: {
       if (labelErrors) {
         setErrors(labelErrors);
         focusFirstError(props.fields, labelErrors);
-        toast.error('有字段需要修正');
+        toast.error(`保存失败，有 ${Object.keys(labelErrors).length} 处需要修正`);
       } else {
         toast.error(message);
       }
@@ -157,11 +168,23 @@ export function ArticleEditor(props: {
   // 正文自动增高：textarea 若自带滚动，面板里就会同时存在两根滚动条
   const taRef = useRef<HTMLTextAreaElement | null>(null);
   useLayoutEffect(() => {
-    const el = taRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = el.scrollHeight + 'px';
+    if (taRef.current) fitTextarea(taRef.current);
   }, [content, mode]);
+  // 宽度变化也要重算：只依赖 content/mode 的话，窄屏下会留着按宽屏算出的高度，
+  // 正文被截出一大截内部滚动（正是「不要两根滚动条」想避免的情况）。
+  // 只在宽度真的变了才重算，避免 setHeight 触发 observer 自循环。
+  useEffect(() => {
+    const el = taRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    let lastW = el.clientWidth;
+    const ro = new ResizeObserver(() => {
+      if (Math.abs(el.clientWidth - lastW) < 1) return;
+      lastW = el.clientWidth;
+      fitTextarea(el);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [mode]);
 
   // 切到分屏/预览时把正文区滚到视野顶部：预览按下去只看到表单会让人困惑
   const bodySecRef = useRef<HTMLDivElement | null>(null);
@@ -189,6 +212,8 @@ export function ArticleEditor(props: {
         <TextInput
           value={title}
           big
+          // 本地新建：直接落在标题框，「新建 → 命名」一步到位（审计 P0-2 补漏）
+          autoFocus={props.isNew}
           fieldName="title"
           placeholder="文章标题"
           onChange={(next) => update('title', next)}

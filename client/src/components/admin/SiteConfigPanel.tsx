@@ -26,6 +26,7 @@ import {
   FieldValue,
   Icon,
   Kicker,
+  LinkButton,
   Rail,
   RailItem,
   TextArea,
@@ -181,15 +182,16 @@ export function SiteConfigPanel(props: {
               </span>
             </FieldValue>
 
-            {/* 保存条：贴底吸附，滚动到哪都能按到 */}
-            <div className="adm-sticky-bar">
+            {/* 保存入口（P4 一致性）：与文章/项目/评论用同一个浮动 dock ——
+                四个面板的「保存在哪」不再需要分别记忆 */}
+            <div className="adm-dock">
               <span className="label-site">
                 {changedIds.length > 0 ? `${changedIds.length} 项待保存` : '没有改动'}
               </span>
               <span style={{ flex: 1 }} />
-              <Button size="sm" variant="quiet" disabled={changedIds.length === 0} onClick={discardAll}>
+              <LinkButton disabled={changedIds.length === 0} onClick={discardAll}>
                 放弃改动
-              </Button>
+              </LinkButton>
               <Button
                 variant="primary"
                 size="sm"

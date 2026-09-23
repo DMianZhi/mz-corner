@@ -74,7 +74,7 @@ function CommentDetail(props: {
     if (Object.keys(clientErrors).length > 0) {
       setErrors(clientErrors);
       focusFirstError(props.fields, clientErrors);
-      toast.error('有字段需要修正');
+      toast.error(`保存失败，有 ${Object.keys(clientErrors).length} 处需要修正`);
       return;
     }
     setSaving(true);
@@ -94,7 +94,7 @@ function CommentDetail(props: {
       if (labelErrors) {
         setErrors(labelErrors);
         focusFirstError(props.fields, labelErrors);
-        toast.error('有字段需要修正');
+        toast.error(`保存失败，有 ${Object.keys(labelErrors).length} 处需要修正`);
       } else {
         toast.error(message);
       }
@@ -221,7 +221,9 @@ export function CommentsPanel(props: {
             key={doc._id}
             index={index + 1}
             title={asText(doc.content) || '(空评论)'}
-            selected={doc._id === selectedId}
+            // 同 ProjectsPanel：首屏用解析后的 selected 判定，否则一行都不亮
+            selected={doc._id === selected?._id}
+            pending={getDraft('comments', doc._id) !== null}
             onSelect={() => setSelectedId(doc._id)}
           />
         ))}

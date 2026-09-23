@@ -233,6 +233,10 @@ function metrics(page) {
       paneOvY: getComputedStyle(pane).overflowY,
       overflow: pane.scrollHeight > pane.clientHeight + 2,
       taInner: ta ? ta.scrollHeight > ta.clientHeight + 2 : null,
+      taDiff: ta ? ta.scrollHeight - ta.clientHeight : -1,
+      taBorderY: ta
+        ? parseFloat(getComputedStyle(ta).borderTopWidth) + parseFloat(getComputedStyle(ta).borderBottomWidth)
+        : -1,
       docH: document.documentElement.scrollHeight,
       winH: window.innerHeight,
       railW: Math.round(rail.getBoundingClientRect().width),
@@ -242,6 +246,7 @@ function metrics(page) {
   });
   check('窄屏：容器滚动', 'auto', nw.paneOvY);
   check('窄屏：容器确实溢出', true, nw.overflow);
+  if (nw.taInner) console.log(`       窄屏正文 textarea：scrollH-clientH 差值 ${nw.taDiff}px（边框 ${nw.taBorderY}px）`);
   check('窄屏：正文仍无内部滚动条', false, nw.taInner);
   check('窄屏：整页不滚', true, nw.docH <= nw.winH + 1);
   check('窄屏：索引栏横向铺满', true, nw.railW >= nw.winW - 2);

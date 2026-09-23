@@ -68,7 +68,7 @@ function ProjectDetail(props: {
     if (Object.keys(clientErrors).length > 0) {
       setErrors(clientErrors);
       focusFirstError(props.fields, clientErrors);
-      toast.error('有字段需要修正');
+      toast.error(`保存失败，有 ${Object.keys(clientErrors).length} 处需要修正`);
       return;
     }
     setSaving(true);
@@ -87,7 +87,8 @@ function ProjectDetail(props: {
       const fieldErrors = mapErrors(props.fields, message);
       if (fieldErrors) {
         setErrors(fieldErrors);
-        toast.error('有字段需要修正');
+        focusFirstError(props.fields, fieldErrors);
+        toast.error(`保存失败，有 ${Object.keys(fieldErrors).length} 处需要修正`);
       } else {
         toast.error(message);
       }
@@ -232,8 +233,11 @@ export function ProjectsPanel(props: {
             key={doc._id}
             index={index + 1}
             title={asText(doc.name) || '(未命名)'}
-            selected={doc._id === selectedId}
+            // 用解析后的 selected（含「未选中时落到第一条」的回退）判定高亮，
+            // 否则首屏 selectedId 还是 null，左栏一行都不亮（审计 P3-7）
+            selected={doc._id === selected?._id}
             tone={statusTone(asText(doc.status))}
+            pending={getDraft('projects', doc._id) !== null}
             onSelect={() => setSelectedId(doc._id)}
           />
         ))}

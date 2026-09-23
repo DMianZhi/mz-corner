@@ -43,8 +43,17 @@ export function ArticlesPanel(props: {
   const [pendingList, setPendingList] = useState<PendingArticle[]>(() => listPending('articles'));
   const [creating, setCreating] = useState(false);
 
+  // 文章索引按发布日期倒序（审计 P3）：之前是数据库自然顺序 —— 默认落在哪一条
+  // 纯看运气，而列表里又没有日期列，人眼也判断不出顺序。空日期（含本地草稿）排最后。
+  const ordered = [...props.documents].sort((a, b) => {
+    const da = asText(a.publishDate);
+    const db = asText(b.publishDate);
+    if (da !== db) return db.localeCompare(da);
+    return asText(b._id).localeCompare(asText(a._id));
+  });
+
   // 本地草稿（未落库）排在真实文档后面，一样可以选中编辑
-  const allDocs: ContentDocument[] = [...props.documents, ...pendingList];
+  const allDocs: ContentDocument[] = [...ordered, ...pendingList];
 
   // 未选中时默认落到第一条；selectedId 失效（文档被删）同样回退
   const selected =

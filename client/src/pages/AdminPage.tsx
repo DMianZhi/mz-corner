@@ -88,7 +88,7 @@ function LoginGate(props: { onOk: () => void }) {
           <span className="adm-brand-mark">
             <Icon.Lock size={13} />
           </span>
-          <span className="adm-brand-text">管理后台</span>
+          <h1 className="adm-brand-text">管理后台</h1>
         </div>
         <p style={{ fontSize: 12.5, color: 'var(--text-3)', margin: '0 0 22px', lineHeight: 1.6 }}>
           输入管理口令以编辑站点内容。会话有效期 7 天，期间无需重复登录。
@@ -250,12 +250,25 @@ export default function AdminPage() {
 
   return (
     <div className="adm-shell">
+      {/* 键盘用户的第一个停靠点（P4）：省掉「穿过顶栏 6 个链接」才能到内容 */}
+      {/* HashRouter 下 href="#x" 会把 hash 当路由改掉（实测直接跳出 /admin），
+          所以拦住默认行为、手动把焦点移到主内容 */}
+      <a
+        className="adm-skip"
+        href="#adm-main"
+        onClick={(event) => {
+          event.preventDefault();
+          document.getElementById('adm-main')?.focus();
+        }}
+      >
+        跳到主内容
+      </a>
       <header className="adm-topbar">
         <div className="adm-brand">
           <span className="adm-brand-mark">
             <Icon.Sliders size={13} />
           </span>
-          <span className="adm-brand-text">管理后台</span>
+          <h1 className="adm-brand-text">管理后台</h1>
         </div>
 
         {pendingCount > 0 ? (
@@ -322,6 +335,7 @@ export default function AdminPage() {
         </div>
       ) : null}
 
+      <main id="adm-main" tabIndex={-1} className="adm-main">
       {tab === 'articles' ? (
         <div id={`adm-tabpanel-${tab}`} role="tabpanel" aria-labelledby={`adm-tab-${tab}`} className="adm-tabpanel">
         <ArticlesPanel
@@ -366,6 +380,7 @@ export default function AdminPage() {
         />
         </div>
       ) : null}
+      </main>
     </div>
   );
 }

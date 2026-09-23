@@ -84,7 +84,7 @@ const check = (name, expected, actual) => {
 
   await page.click('.adm-dock .adm-dock-btn:has-text("分屏")');
   await page.waitForSelector('.adm-preview', { timeout: 20000 });
-  check('分屏预览可用', 1, await page.locator('.adm-pane-input').count());
+  check('分屏预览可用', 1, await page.locator('.adm-split .adm-textarea').count());
   await page.screenshot({ path: `${OUT}/live-editor-split-dark.png` });
 
   // 1920 是用户的真实窗口宽度：详情列必须铺满右栏，短字段成对而不是拉成长条。

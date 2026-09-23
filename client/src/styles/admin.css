@@ -75,7 +75,10 @@ html.light .adm-shell {
   background: var(--brand);
   color: var(--brand-ink);
 }
+/* 顶栏品牌字已升为 h1（审计 P4：h1 = 0）：视觉零改动，只需清掉标题默认样式 */
 .adm-brand-text {
+  margin: 0;
+  font-weight: 500;
   font-family: var(--font-mono);
   font-size: 11px;
   letter-spacing: 0.14em;
@@ -152,7 +155,7 @@ html.light .adm-shell {
   cursor: not-allowed;
 }
 .adm-link--brand {
-  color: var(--brand);
+  color: var(--brand-text);
 }
 .adm-link:focus-visible {
   outline: 2px solid var(--brand);
@@ -252,7 +255,7 @@ html.light .adm-shell {
 /* ── 表单 ─────────────────────────────────────────────── */
 
 .adm-req {
-  color: var(--brand);
+  color: var(--brand-text);
   font-size: 12px;
   line-height: 1;
 }
@@ -452,6 +455,19 @@ html.light .adm-shell {
   background: var(--border-strong);
   color: var(--text-1);
 }
+/* 命中区扩大（P4 审计：视觉 16×16，热区补到 24×24）—— 视觉零改动，
+   靠 ::after 撑出 4px 外扩，触控板/移动端不容易点空 */
+.adm-chip-x {
+  position: relative;
+}
+.adm-chip-x::after {
+  content: '';
+  position: absolute;
+  /* -5px：热区 26×26（审计要求 24–28）—— 取 26 而不是 24，
+     是因为热区恰好等于 chip 内边距时，边界那一像素仍会落到 chip 上 */
+  inset: -5px;
+  border-radius: 8px;
+}
 
 /* ── 徽标 / 卡片 ──────────────────────────────────────── */
 
@@ -469,7 +485,7 @@ html.light .adm-shell {
 }
 .adm-badge--brand {
   background: var(--brand-dim);
-  color: var(--brand);
+  color: var(--brand-text);
 }
 .adm-badge--danger {
   background: color-mix(in srgb, var(--danger) 14%, transparent);
@@ -594,7 +610,7 @@ html.light .adm-shell {
 }
 /* 需要注意（维护中 / 待处理）：实心点 + 文字跟着变色 */
 .adm-ritem--warn .adm-ritem-t {
-  color: var(--brand);
+  color: var(--brand-text);
 }
 
 /* ── 右侧详情 / 编辑器 ────────────────────────────────── */
@@ -693,6 +709,11 @@ html.light .adm-shell {
   transform: translateX(-50%);
   z-index: 40;
   display: inline-flex;
+  /* 宽度按内容撑开（P4）：fixed 元素在只给了 left 的情况下，可用宽度只算
+     「left → 视口右缘」这一段 —— 900px 视口下只剩 450px，内容 470px 就被挤换行 */
+  width: max-content;
+  max-width: calc(100vw - 24px);
+  flex-wrap: wrap;
   align-items: center;
   gap: 4px;
   padding: 5px;
@@ -741,8 +762,10 @@ html.light .adm-shell {
 
 /* ── 分屏 ─────────────────────────────────────────────── */
 
-/* 分屏时文本域自身不再需要边框与圆角（外框已由 .adm-split 提供） */
-.adm-pane-input {
+/* 分屏时文本域自身不再需要边框与圆角（外框已由 .adm-split 提供）。
+   注：这里原为 .adm-pane-input —— 该 class 早已不存在，规则一直空转，
+   分屏里文本域会多出一层边框与圆角（P4 顺手修） */
+.adm-split .adm-textarea {
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -750,8 +773,8 @@ html.light .adm-shell {
   resize: none;
   padding: 20px 22px;
 }
-.adm-pane-input:hover,
-.adm-pane-input:focus {
+.adm-split .adm-textarea:hover,
+.adm-split .adm-textarea:focus {
   border-color: transparent;
   box-shadow: none;
 }
@@ -780,22 +803,7 @@ html.light .adm-shell {
 
 /* ── 贴底保存条（站点设置）────────────────────────────── */
 
-.adm-sticky-bar {
-  position: sticky;
-  bottom: 20px;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 20px;
-  padding: 10px 14px;
-  border-radius: 13px;
-  background: color-mix(in srgb, var(--bg-card) 90%, transparent);
-  backdrop-filter: blur(18px) saturate(180%);
-  -webkit-backdrop-filter: blur(18px) saturate(180%);
-  border: 1px solid var(--border-strong);
-  box-shadow: 0 18px 40px -22px rgba(0, 0, 0, 0.6);
-}
+
 
 /* ── 空态 / 加载 ──────────────────────────────────────── */
 
@@ -885,7 +893,9 @@ html.light .adm-shell {
     /* shrink 必须为 0：右侧详情内容很长，若两者都可缩，
        索引条会被按比例挤矮（实测 158px 被压到 112px），下面几行就看不见了 */
     flex: 0 0 auto;
-    max-height: 38%;
+    /* P4 审计修复：38% 在 784px 高的视口下占 298px，把详情压得只剩一条缝，
+       浮动 dock 又压在上面 —— 收到 26%（约 200px，仍能看到 5 行） */
+    max-height: 26%;
     border-right: 0;
     border-bottom: 1px solid var(--border-soft);
   }
@@ -900,6 +910,12 @@ html.light .adm-shell {
   }
   .adm-fv {
     grid-template-columns: 96px minmax(0, 1fr);
+  }
+  .adm-dock {
+    /* P4 审计修复：窄屏视口矮，悬浮 dock 会盖住整行字段 —— 贴底边 */
+    left: 50%;
+    bottom: 12px;
+    justify-content: center;
   }
 }
 
@@ -953,4 +969,41 @@ html.light .adm-shell {
   flex-direction: column;
   flex: 1;
   min-height: 0;
+}
+
+/* ── P4 补漏：跳转、页面标题、左栏键盘导航 ─────────────── */
+/* 跳转到主内容：默认视觉隐藏，键盘聚焦时从顶栏下方浮出 */
+.adm-skip {
+  position: fixed;
+  top: calc(var(--nav-h) + 8px);
+  left: 50%;
+  transform: translate(-50%, -180%);
+  z-index: 60;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  color: var(--text-1);
+  font-size: 12.5px;
+  text-decoration: none;
+  transition: transform 0.16s ease;
+}
+.adm-skip:focus {
+  transform: translate(-50%, 0);
+  outline: 2px solid var(--brand);
+}
+/* 面板区外层 main：布局与之前完全一致（tabpanel 仍是 shell 的 flex 子项） */
+.adm-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.adm-main:focus {
+  outline: none;
+}
+/* 左栏方向键导航时给焦点可见环（鼠标点击不显示） */
+.adm-ritem:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
 }

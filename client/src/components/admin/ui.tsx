@@ -7,6 +7,16 @@
 // - 遵循 client/AGENTS.md：单 props 参数 + 内联类型、不用 useMemo/useCallback
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
+/** 把 textarea 高度设为「内容高度 + 上下边框」。
+ *  border-box 下 height 含边框，不补 borderY 会恒差 2px，留一条看不见的内部滚动。
+ *  提成模块级纯函数而不是组件内 useCallback：client/AGENTS.md 约定不用 useMemo/useCallback。 */
+export function fitTextarea(el: HTMLTextAreaElement) {
+  const cs = getComputedStyle(el);
+  const borderY = parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
+  el.style.height = 'auto';
+  el.style.height = `${el.scrollHeight + borderY}px`;
+}
+
 /* ── 图标 ─────────────────────────────────────────────── */
 
 function Svg(props: { children: ReactNode; size?: number; strokeWidth?: number }) {
@@ -309,13 +319,25 @@ export function TextArea(props: {
   const meta = useContext(FieldMetaContext);
   const ref = useRef<HTMLTextAreaElement | null>(null);
 
-  // autoGrow：内容变化时把高度重置为滚动高度，短内容不浪费空间，长内容自然展开
+  // autoGrow：内容变化时把高度重置为内容高度，短内容不浪费空间，长内容自然展开
   useEffect(() => {
     if (!props.autoGrow || !ref.current) return;
-    const el = ref.current;
-    el.style.height = 'auto';
-    el.style.height = `${el.scrollHeight + 2}px`;
+    fitTextarea(ref.current);
   }, [props.value, props.autoGrow]);
+  // 宽度变化也要重算（窗口缩放 / 窄屏降级）：只跟内容走的话，窄屏下会留着
+  // 按宽屏算出的高度，正文被截出一截内部滚动。只在宽度真变了才重算，避免自循环。
+  useEffect(() => {
+    const el = ref.current;
+    if (!props.autoGrow || !el || typeof ResizeObserver === 'undefined') return undefined;
+    let lastW = el.clientWidth;
+    const ro = new ResizeObserver(() => {
+      if (Math.abs(el.clientWidth - lastW) < 1) return;
+      lastW = el.clientWidth;
+      fitTextarea(el);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [props.autoGrow]);
 
   return (
     <textarea
@@ -511,6 +533,26 @@ export function Rail(props: {
   filter?: ReactNode;
   children: ReactNode;
 }) {
+  const listRef = useRef<HTMLDivElement | null>(null);
+
+  // 方向键导航（审计 P4）：24 条 = 24 个 Tab 停靠点，键盘用户换文档得按 20 多次。
+  // 改成 roving tabindex：Tab 只进一次，↑↓ 在条目间移动**并选中**（与鼠标一致），
+  // Home/End 跳首尾 —— listbox 的常规键盘契约。
+  const focusAt = (index: number) => {
+    const items = Array.from(listRef.current?.querySelectorAll<HTMLButtonElement>('.adm-ritem') ?? []);
+    if (!items.length) return;
+    const target = items[(index + items.length) % items.length];
+    target.focus();
+    target.click();
+  };
+  const move = (offset: 1 | -1) => {
+    const items = Array.from(listRef.current?.querySelectorAll<HTMLButtonElement>('.adm-ritem') ?? []);
+    if (!items.length) return;
+    const focused = items.findIndex((el) => el === document.activeElement);
+    const selected = items.findIndex((el) => el.getAttribute('aria-selected') === 'true');
+    focusAt((focused >= 0 ? focused : Math.max(selected, 0)) + offset);
+  };
+
   return (
     <aside className="adm-rail">
       <div className="adm-rail-head">
@@ -520,7 +562,27 @@ export function Rail(props: {
         {props.action}
       </div>
       {props.filter ? <div className="adm-rail-filter">{props.filter}</div> : null}
-      <div className="adm-rail-list" role="listbox" aria-label={`${props.title}列表`}>
+      <div
+        ref={listRef}
+        className="adm-rail-list"
+        role="listbox"
+        aria-label={`${props.title}列表`}
+        onKeyDown={(event) => {
+          if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            move(1);
+          } else if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            move(-1);
+          } else if (event.key === 'Home') {
+            event.preventDefault();
+            focusAt(0);
+          } else if (event.key === 'End') {
+            event.preventDefault();
+            focusAt(-1);
+          }
+        }}
+      >
         {props.children}
       </div>
     </aside>
@@ -550,6 +612,8 @@ export function RailItem(props: {
       className={['adm-ritem', tone === 'warn' ? 'adm-ritem--warn' : ''].filter(Boolean).join(' ')}
       aria-selected={props.selected}
       title={props.title}
+      // roving tabindex（P4）：列表里只有一个可停靠点，Tab 键不再逐个扫过 24 条
+      tabIndex={props.selected ? 0 : -1}
       data-autofocus={props.selectedOnEnter && props.selected ? '' : undefined}
       onClick={props.onSelect}
     >
