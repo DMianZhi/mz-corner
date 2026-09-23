@@ -198,6 +198,29 @@ async function publicCount() {
   });
   check('跳转链接默认完全在视口外', true, skipHidden.bottom <= 0);
   check('跳转链接默认不可被点到（不挡顶栏）', false, skipHidden.isHit);
+  // 触发后必须有可见反馈（原先 main 是 outline: none，按 Enter 屏幕毫无变化）
+  await page.locator('.adm-skip').focus();
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(300);
+  const landing = await page.evaluate(() => {
+    const el = document.getElementById('adm-main');
+    const cs = getComputedStyle(el);
+    return {
+      active: document.activeElement?.id || '',
+      outlineStyle: cs.outlineStyle,
+      outlineWidth: cs.outlineWidth,
+      inTopbar: (document.querySelector('.adm-topbar') || document.body).contains(document.activeElement),
+    };
+  });
+  check('跳转后焦点落到主内容', 'adm-main', landing.active);
+  check('跳转落点有可见焦点提示', true, landing.outlineStyle !== 'none' && landing.outlineWidth !== '0px');
+  console.log(`       落点提示 outline: ${landing.outlineStyle} ${landing.outlineWidth}`);
+  // 它存在的唯一目的：省掉顶栏那些 Tab 停靠点
+  await page.keyboard.press('Tab');
+  check('跳转后下一站已不在顶栏内（真的省掉了顶栏）', false, await page.evaluate(() =>
+    (document.querySelector('.adm-topbar') || document.body).contains(document.activeElement),
+  ));
+  await page.evaluate(() => document.activeElement?.blur?.());
 
   // ── 3. 次级信息对比度（P1） ─────────────────────────────
   console.log('\n[3] 次级信息对比度（P1 目标 ≥4.5:1）');

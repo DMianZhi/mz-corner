@@ -1024,8 +1024,14 @@ html.light .adm-shell {
   flex: 1;
   min-height: 0;
 }
+/* 跳转落点：main 只可能被「跳到主内容」程序化聚焦（tabindex="-1"），
+   所以这里必须给出可见反馈。原先写的 outline: none 把唯一反馈掐掉了，
+   结果是按 Enter 后屏幕上什么都不变 —— 功能通了（焦点确实移了、下一站
+   确实跳过了顶栏 6 个链接），但看得见的用户完全无法判断"跳到了没"。
+   实测确认后改为品牌色内描边：够醒目、只存在于焦点期间、不挤压布局。 */
 .adm-main:focus {
-  outline: none;
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
 }
 /* 左栏方向键导航时给焦点可见环（鼠标点击不显示） */
 .adm-ritem:focus-visible {

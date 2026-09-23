@@ -361,6 +361,24 @@ async function visualDiff(page, onSel, offSel, keys) {
   await page.keyboard.press('Enter');
   await page.waitForTimeout(250);
   check('跳转后焦点落到主内容', 'adm-main', await page.evaluate(() => document.activeElement?.id || ''));
+  // 落点必须有可见反馈：原先 main 是 outline: none，按 Enter 后屏幕毫无变化，
+  // 用户根本判断不出"跳到了没"（用户实测反馈「触发没有发生什么」）
+  const landing = await page.evaluate(() => {
+    const el = document.getElementById('adm-main');
+    const cs = getComputedStyle(el);
+    return { outlineStyle: cs.outlineStyle, outlineWidth: cs.outlineWidth, boxShadow: cs.boxShadow };
+  });
+  check('跳转落点有可见焦点提示', true, landing.outlineStyle !== 'none' || landing.boxShadow !== 'none');
+  console.log(`       落点提示 outline: ${landing.outlineStyle} ${landing.outlineWidth}`);
+  // 这个链接存在的唯一目的：省掉顶栏那 6 个 Tab 停靠点。必须验证它真的省了。
+  await page.keyboard.press('Tab');
+  const afterSkip = await page.evaluate(() => {
+    const el = document.activeElement;
+    const tb = document.querySelector('.adm-topbar');
+    return { inTopbar: tb ? tb.contains(el) : false, cls: el?.className || el?.tagName };
+  });
+  check('跳转后下一站已不在顶栏内（真的省掉了顶栏）', false, afterSkip.inTopbar);
+  console.log(`       下一站：${afterSkip.cls}`);
   // 回归：HashRouter 下跳转链接不能把路由带跑（曾实测跳出 /admin）
   check('路由未被跳转链接改掉', true, page.url().includes('#/admin'));
 
