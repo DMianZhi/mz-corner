@@ -710,6 +710,14 @@ html.light .adm-shell {
 /* ── 浮动工具条（编辑 / 分屏 / 预览 / 保存）────────────── */
 
 .adm-dock {
+  /* dock 内按钮的统一圆角与高度。
+     圆角取「同心值」：子元素圆角 = 容器圆角 − 内边距（14 − 5 = 9）。
+     这样内外两层圆角视觉同心，不会出现"内层比外框更方"的错位；
+     写成 calc 是为了容器圆角/内边距若调整，子元素自动跟随。 */
+  --dock-r: 14px;
+  --dock-pad: 5px;
+  --dock-btn-r: calc(var(--dock-r) - var(--dock-pad));
+  --dock-btn-h: 30px;
   position: fixed;
   /* 对齐右栏中心而不是视口中心：左栏 320px 常驻，按 50% 居中会整体偏左 160px */
   left: calc(50% + var(--rail-w, 0px) / 2);
@@ -724,8 +732,8 @@ html.light .adm-shell {
   flex-wrap: wrap;
   align-items: center;
   gap: 4px;
-  padding: 5px;
-  border-radius: 14px;
+  padding: var(--dock-pad);
+  border-radius: var(--dock-r);
   background: color-mix(in srgb, var(--bg-card) 86%, transparent);
   backdrop-filter: blur(18px) saturate(180%);
   -webkit-backdrop-filter: blur(18px) saturate(180%);
@@ -769,6 +777,26 @@ html.light .adm-shell {
   height: 20px;
   margin: 0 3px;
   background: var(--border-soft);
+}
+
+/* 统一 dock 内所有按钮的圆角与高度（用户实测截图指出「圆角不统一」）。
+   改前实测四种圆角混在一根 44px 的条里：
+     dock 容器 14px / 编辑·分屏·预览 9px / 删除 8px / 保存 999px（胶囊）
+   保存的胶囊在圆角矩形容器里两端弧度明显大于外框，同色相邻时最刺眼。
+   高度也统一为 30px：原先 28 / 30 / 32 三种，即使圆角数值相同，
+   同样 9px 落在不同高度的按钮上视觉弧度仍不一致。
+   注：本规则必须排在 .adm-btn--sm.adm-btn--primary 之后 —— 两者特异性
+   相同（都是 2 个类），靠源序决定胜负。
+   「放弃」是 .adm-link（纯文字、无背景），圆角不参与视觉，不动。 */
+.adm-dock .adm-dock-btn,
+.adm-dock .adm-btn {
+  /* 显式声明：删除按钮带 1px 边框，若按 content-box 解析，height 30 会
+     实际渲染成 32px，统一高度就白做了。与 .adm-shell 同一约定，
+     不依赖 Tailwind preflight 是否在场。 */
+  box-sizing: border-box;
+  height: var(--dock-btn-h);
+  padding-block: 0;
+  border-radius: var(--dock-btn-r);
 }
 
 /* ── 分屏 ─────────────────────────────────────────────── */

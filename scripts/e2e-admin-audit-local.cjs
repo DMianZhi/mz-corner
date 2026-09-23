@@ -445,6 +445,38 @@ async function visualDiff(page, onSel, offSel, keys) {
     await page.locator('.adm-dock-btn', { hasText: '编辑' }).first().click();
     await page.waitForTimeout(300);
   }
+  // dock 内圆角/高度统一（用户实测截图指出「dock 栏的按钮的圆角不统一」）。
+  // 改前实测一根 44px 的条里混了四种圆角：容器 14 / 模式按钮 9 / 删除 8 /
+  // 保存 999（胶囊），高度也是 28 / 30 / 32 三种。
+  // 断言查「去重后剩几个值」—— 将来谁再加一种圆角会立刻红，不用等肉眼发现。
+  {
+    // 只量「有盒子的按钮」两族：.adm-dock-btn（编辑/分屏/预览）与 .adm-btn（删除/保存）。
+    // 「放弃」是 .adm-link（纯文字、无背景），圆角不参与视觉，按设计不在统一范围内。
+    const dockMetrics = await page.evaluate(() =>
+      [...document.querySelectorAll('.adm-dock .adm-dock-btn, .adm-dock .adm-btn')].map((el) => {
+        const cs = getComputedStyle(el);
+        return {
+          name: el.textContent.trim().slice(0, 4),
+          radius: cs.borderTopLeftRadius,
+          h: Math.round(el.getBoundingClientRect().height),
+        };
+      }),
+    );
+    const radii = [...new Set(dockMetrics.map((m) => m.radius))];
+    const heights = [...new Set(dockMetrics.map((m) => m.h))];
+    check('dock 内按钮圆角统一', 1, radii.length);
+    check('dock 内按钮高度统一', 1, heights.length);
+    // 圆角必须与容器同心：容器 14px − 内边距 5px = 9px
+    const concentric = await page.evaluate(() => {
+      const dock = document.querySelector('.adm-dock');
+      const cs = getComputedStyle(dock);
+      return (
+        parseFloat(cs.borderTopLeftRadius) - parseFloat(cs.paddingTop)
+      );
+    });
+    check('dock 按钮圆角 = 容器圆角 − 内边距（同心）', Math.round(concentric), parseFloat(radii[0]));
+    console.log(`       实测：${dockMetrics.map((m) => `${m.name} ${m.radius}/h${m.h}`).join(' · ')}`);
+  }
 
   // 站点设置：保存入口统一成浮动 dock（P4）
   await page.locator('#adm-tab-site_config').click();

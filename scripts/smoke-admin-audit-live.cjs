@@ -199,6 +199,29 @@ async function publicCount() {
   await page.locator('#adm-tab-articles').click();
   await page.waitForTimeout(300);
 
+  // dock 内圆角/高度统一（用户实测截图指出「dock 栏的按钮的圆角不统一」）
+  // 改前实测：容器 14 / 编辑·分屏·预览 9 / 删除 8 / 保存 999（胶囊），高度 28/30/32
+  {
+    const metrics = await page.evaluate(() =>
+      [...document.querySelectorAll('.adm-dock .adm-dock-btn, .adm-dock .adm-btn')].map((el) => ({
+        name: el.textContent.trim().slice(0, 4),
+        radius: getComputedStyle(el).borderTopLeftRadius,
+        h: Math.round(el.getBoundingClientRect().height),
+      })),
+    );
+    check('dock 内按钮圆角统一', 1, [...new Set(metrics.map((m) => m.radius))].length);
+    check('dock 内按钮高度统一', 1, [...new Set(metrics.map((m) => m.h))].length);
+    check('dock 按钮圆角与容器同心', true, await page.evaluate(() => {
+      const cs = getComputedStyle(document.querySelector('.adm-dock'));
+      const btn = document.querySelector('.adm-dock .adm-dock-btn');
+      return (
+        Math.round(parseFloat(cs.borderTopLeftRadius) - parseFloat(cs.paddingTop)) ===
+        parseFloat(getComputedStyle(btn).borderTopLeftRadius)
+      );
+    }));
+    console.log(`       实测：${metrics.map((m) => `${m.name} ${m.radius}/h${m.h}`).join(' · ')}`);
+  }
+
   // ── 3. 次级信息对比度（P1） ─────────────────────────────
   console.log('\n[3] 次级信息对比度（P1 目标 ≥4.5:1）');
   const darkTab = await contrastOf('[data-tab="projects"]');
