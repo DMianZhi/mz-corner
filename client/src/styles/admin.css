@@ -574,9 +574,16 @@ html.light .adm-shell {
 .adm-ritem:hover {
   background: var(--bg-hover);
 }
-.adm-ritem[aria-current='true'] {
-  background: var(--bg-hover);
+/* 死选择器修复：组件（RailItem）设的是 aria-selected（role=option 的正确语义），
+   这里原本写的是 [aria-current='true']，永远匹配不上 —— 结果是「我在编辑哪一条」
+   全站零高亮，点击左栏也没有任何反馈（只有 hover/focus 有）。
+   同时把选中态从 --bg-hover 换成品牌色浅底：与 hover 同色等于没区分。 */
+.adm-ritem[aria-selected='true'] {
+  background: var(--brand-dim);
   border-left-color: var(--brand);
+}
+.adm-ritem[aria-selected='true'] .adm-ritem-n {
+  color: var(--brand-text);
 }
 .adm-ritem:focus-visible {
   outline: 2px solid var(--brand);
@@ -593,8 +600,9 @@ html.light .adm-shell {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.adm-ritem[aria-current='true'] .adm-ritem-t {
+.adm-ritem[aria-selected='true'] .adm-ritem-t {
   font-weight: 600;
+  color: var(--text-1);
 }
 .adm-ritem-d {
   width: 5px;
@@ -744,7 +752,10 @@ html.light .adm-shell {
   color: var(--text-1);
   background: var(--bg-hover);
 }
-.adm-dock-btn[aria-selected='true'] {
+/* 死选择器修复：组件（ArticleEditor 的 MODES 按钮）设的是 aria-pressed（切换按钮
+   的正确语义），这里原本写的是 [aria-selected] —— 编辑/预览/分屏三档
+   「当前在哪一档」同样零高亮。 */
+.adm-dock-btn[aria-pressed='true'] {
   background: var(--brand);
   color: var(--brand-ink);
   font-weight: 600;
@@ -929,6 +940,14 @@ html.light .adm-shell {
 .adm-fv--error .adm-textarea {
   border-color: var(--danger) !important;
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 15%, transparent);
+}
+/* 标题是「无框、只靠一条底线」的自定义字段，套通用红框会变成一个突兀的大红盒子。
+   改成加粗红色底线 + 极轻红色光晕，与字段自身的视觉语言一致，但同样一眼能看出来。
+   必须 !important + 写在通用规则之后：标题的 :focus/:hover 也会把边框改回透明。 */
+.adm-fv--title .adm-input--title {
+  border-color: transparent !important;
+  border-bottom-color: var(--danger) !important;
+  box-shadow: 0 1px 0 0 color-mix(in srgb, var(--danger) 30%, transparent) !important;
 }
 .adm-field-error {
   display: block;

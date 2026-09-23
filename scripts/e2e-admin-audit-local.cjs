@@ -29,6 +29,41 @@ function check(name, expected, actual) {
   }
 }
 
+/**
+ * 「选中态真的渲染出来了吗」——比较选中元素与未选中元素的**计算样式**。
+ *
+ * 教训：之前这里只断言 aria-selected 属性存在，属性是 React 输出的、永远是对的，
+ * 而 CSS 选择器写成了 [aria-current] / [aria-pressed]，压根匹配不上 ——
+ * 属性在、样式死，测试全绿，用户看到的却是零高亮。
+ * 状态类断言必须落到 getComputedStyle 上，不能只看 DOM 属性。
+ */
+async function visualDiff(page, onSel, offSel, keys) {
+  return page.evaluate(
+    ({ onSel, offSel, keys }) => {
+      const on = document.querySelector(onSel);
+      const off = document.querySelector(offSel);
+      // 对照项缺失是测试自身的问题，必须报出来，不能当成「无差异」
+      if (!on || !off) return { error: `对照元素缺失 on=${!!on} off=${!!off}` };
+      const read = (el) => {
+        const cs = getComputedStyle(el);
+        return {
+          bg: cs.backgroundColor,
+          color: cs.color,
+          weight: cs.fontWeight,
+          borderLeft: cs.borderLeftColor,
+          borderColor: cs.borderTopColor,
+          boxShadow: cs.boxShadow,
+          outline: cs.outlineWidth + ' ' + cs.outlineColor,
+        };
+      };
+      const a = read(on);
+      const b = read(off);
+      return { diff: keys.filter((k) => a[k] !== b[k]), on: a, off: b };
+    },
+    { onSel, offSel, keys },
+  );
+}
+
 (async () => {
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
@@ -178,6 +213,10 @@ function check(name, expected, actual) {
 
   // ── 6. 客户端校验拦截，不发请求（P2-4 / P2-5） ───────────
   console.log('\n[6] 校验拦截零请求（P2-4 / P2-5）');
+  // 记录正常态底色，稍后与出错态对比 —— 「红框真的画出来了吗」必须比计算样式
+  const titleBorderNormal = await page.evaluate(
+    () => getComputedStyle(document.querySelector('.adm-input--title')).borderBottomColor,
+  );
   await page.locator('.adm-input--title').fill('');
   await page.waitForTimeout(200);
   const writesBeforeSave = writes.length;
@@ -185,13 +224,44 @@ function check(name, expected, actual) {
   await page.waitForTimeout(700);
   check('空标题保存被拦下（无写请求）', writesBeforeSave, writes.length);
   check('字段级错误可见', true, (await page.locator('.adm-field-error').count()) > 0);
+  // 标题是自定义字段（无框、只靠底线），通用 .adm-fv--error 规则够不到它 ——
+  // 之前只渲染了红字、标题框本身无任何变化。这里比「出错前 vs 出错后」实际边框色。
+  {
+    const after = await page.evaluate(
+      () => getComputedStyle(document.querySelector('.adm-input--title')).borderBottomColor,
+    );
+    check('出错标题框底线变红', true, after !== titleBorderNormal && after !== 'rgba(0, 0, 0, 0)');
+    console.log(`       标题底线：正常 ${titleBorderNormal} → 出错 ${after}`);
+  }
   check('焦点落到出错字段', true, await page.evaluate(() => document.activeElement?.classList.contains('adm-input--title') ?? false));
   const errText = await page.locator('.adm-field-error').first().textContent();
   console.log(`       错误文案：${(errText || '').trim()}`);
   await page.screenshot({ path: `${OUT}/audit-local-validation.png` });
 
+  // 通用 SchemaForm 字段（发布日期）的红框 —— 标题是自定义字段的特例，这里覆盖 P2-4 的原路径。
+  // 没这段的话，“通用字段红框”根本没人验过，标题修好后就全是绿的假象。
+  await page.locator('.adm-input--title').fill(originalTitle);
+  const dateInput = page.locator('[data-field="publishDate"]');
+  const originalDate = await dateInput.inputValue();
+  await dateInput.fill('abc');
+  await page.waitForTimeout(150);
+  const writesBeforeDate = writes.length;
+  await page.locator('.adm-btn:has-text("保存")').first().click();
+  await page.waitForTimeout(600);
+  check('非法日期保存被拦下（无写请求）', writesBeforeDate, writes.length);
+  check('通用字段出错时红框已渲染', true, await page.evaluate(() => {
+    const el = document.querySelector('.adm-fv--error [data-field="publishDate"]');
+    if (!el) return false;
+    const probe = document.createElement('span');
+    probe.style.color = 'var(--danger)';
+    document.body.appendChild(probe);
+    const danger = getComputedStyle(probe).color;
+    probe.remove();
+    return getComputedStyle(el).borderTopColor === danger;
+  }));
   // 恢复标题，再走「放弃」入口（本轮补齐：已落库文章此前没有放弃按钮）
   await page.locator('.adm-input--title').fill(originalTitle);
+  await dateInput.fill(originalDate);
   await page.waitForTimeout(200);
   await page.locator('.adm-link:has-text("放弃")').first().click();
   await page.waitForTimeout(400);
@@ -311,6 +381,52 @@ function check(name, expected, actual) {
   await page.locator('#adm-tab-projects').click();
   await page.waitForTimeout(400);
   check('项目首屏恰好 1 条高亮', 1, await page.locator('.adm-ritem[aria-selected="true"]').count());
+
+  // ── 选中态「真的画出来了吗」（死选择器回归防护）──────────────────
+  // 顶部标签：当前页签 vs 其他页签
+  {
+    const r = await visualDiff(page, '#adm-tab-projects', '#adm-tab-articles', ['bg', 'color', 'weight']);
+    check('当前页签与其它页签有视觉差异', true, (r.diff || []).length > 0 || r.error);
+    check('页签对照元素齐全', undefined, r.error);
+  }
+  // 编辑器浮动工具条：当前模式 vs 其它模式（原 [aria-selected] 死选择器）
+  await page.locator('#adm-tab-articles').click();
+  await page.waitForTimeout(400);
+  await page.locator('.adm-ritem').first().click();
+  await page.waitForTimeout(500);
+  // 左栏选中态：必须在「有 ≥2 条」的页签上比（本地项目只有 1 条，没有对照项）
+  {
+    const r = await visualDiff(page, '.adm-ritem[aria-selected="true"]', '.adm-ritem[aria-selected="false"]', [
+      'bg',
+      'weight',
+      'borderLeft',
+    ]);
+    check('左栏对照元素齐全（≥2 条）', undefined, r.error);
+    check('左栏选中项与未选中项有视觉差异', true, (r.diff || []).length > 0);
+    check('左栏选中项背景≠未选中项背景', true, (r.diff || []).includes('bg'));
+    check('左栏选中项左强调条着色', true, (r.diff || []).includes('borderLeft'));
+  }
+  {
+    const r = await visualDiff(page, '.adm-dock-btn[aria-pressed="true"]', '.adm-dock-btn[aria-pressed="false"]', [
+      'bg',
+      'color',
+      'weight',
+    ]);
+    check('编辑器当前模式按钮有视觉差异', true, (r.diff || []).length > 0 || r.error);
+  }
+  // 切模式后高亮要跟着走（选中态是活的，不是一次性渲染）
+  {
+    const before = await page.locator('.adm-dock-btn[aria-pressed="true"]').textContent();
+    const target = page.locator('.adm-dock-btn[aria-pressed="false"]').first();
+    const want = (await target.textContent())?.trim();
+    await target.click();
+    await page.waitForTimeout(400);
+    check('切换模式后高亮跟随', want, (await page.locator('.adm-dock-btn[aria-pressed="true"]').textContent())?.trim());
+    check('切换模式后高亮唯一', 1, await page.locator('.adm-dock-btn[aria-pressed="true"]').count());
+    void before;
+    await page.locator('.adm-dock-btn', { hasText: '编辑' }).first().click();
+    await page.waitForTimeout(300);
+  }
 
   // 站点设置：保存入口统一成浮动 dock（P4）
   await page.locator('#adm-tab-site_config').click();

@@ -351,11 +351,16 @@ export function ArticleEditor(props: {
   );
 }
 
-/** 标题的错误包裹：贴着标题框渲染（红边 + 错误文字），而不是只弹 toast */
+/** 标题的错误包裹：贴着标题框渲染（红边 + 错误文字），而不是只弹 toast
+ *
+ * 补漏：之前这里只渲染了错误文字，标题框本身没有红边 —— 因为通用的
+ * `.adm-fv--error .adm-input` 规则要求外层带 `.adm-fv--error`，而标题是
+ * 自定义字段（无框、只靠底线），根本没这个类。结果最显眼的字段出错时
+ * 只有一行红字。现在补上类名，具体视觉在 CSS 里按标题的语言单独处理。 */
 function FieldRowLike(props: { error?: string; children: React.ReactNode }) {
   if (!props.error) return <>{props.children}</>;
   return (
-    <span style={{ display: 'block' }}>
+    <span className="adm-fv--error adm-fv--title" style={{ display: 'block' }}>
       {props.children}
       <span className="adm-field-error" role="alert" style={{ display: 'block', marginTop: 6 }}>
         {props.error}

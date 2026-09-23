@@ -27,7 +27,19 @@ if (!apiBase) throw new Error('缺少 API 地址：请在根目录 .env 配置 U
 const PW = process.env.ADMIN_PASSWORD;
 if (!PW) throw new Error('缺少 ADMIN_PASSWORD 环境变量');
 
-const SITE = `${staticHost.replace(/\/$/, '')}/index.html#/admin`;
+/** 本地 dist 产物名（用于验证线上真的跑的是刚构建的那份） */
+function localDistAssets() {
+  const html = fs.readFileSync('client/dist/index.html', 'utf8');
+  return {
+    js: (html.match(/index-[A-Za-z0-9_-]+\.js/) || [])[0] || '',
+    css: (html.match(/index-[A-Za-z0-9_-]+\.css/) || [])[0] || '',
+  };
+}
+const DIST = localDistAssets();
+
+// 关键：index.html 在 CDN 上有缓存（实测 age 381 / cachetime 1119，回源前一直是旧 bundle）。
+// 冒烟必须带 cache-buster，否则测的是上一版前端 —— 2026-09-23 就是这么漏掉一次「部署了但没生效」。
+const SITE = `${staticHost.replace(/\/$/, '')}/index.html?v=${encodeURIComponent(DIST.js)}#/admin`;
 const OUT = 'C:/Users/admin/data/work/blog/mz-corner/.wpscomate/live-shots';
 fs.mkdirSync(OUT, { recursive: true });
 
@@ -108,11 +120,37 @@ async function publicCount() {
     }, selector);
 
   // ── 0. 线上构建版本 ─────────────────────────────────────
-  console.log('\n[0] 线上构建');
-  const html = await (await fetch(`${staticHost.replace(/\/$/, '')}/index.html`)).text();
-  const bundle = (html.match(/assets\/index-[A-Za-z0-9_-]+\.js/) || [''])[0];
-  console.log(`       bundle：${bundle}`);
-  check('bundle 存在', true, bundle.length > 0);
+  // 之前只断言 bundle 存在 —— 那怕线上跑的是半年前的旧包也照样绿。
+  // 改成：回源（带 cache-buster）拿 index.html，比对它引用的产物名与本地 dist 是否一致。
+  // 这一步能同时抳住两种事故：① 忘了传静态托管；② 传了但 CDN 还在发旧 index.html。
+  console.log('\n[0] 线上构建与本地 dist 一致性');
+  {
+    const bust = `${staticHost.replace(/\/$/, '')}/index.html?cb=${Date.now()}`;
+    const html = await (await fetch(bust)).text();
+    const liveJs = (html.match(/index-[A-Za-z0-9_-]+\.js/) || [''])[0];
+    const liveCss = (html.match(/index-[A-Za-z0-9_-]+\.css/) || [''])[0];
+    check('本地 dist 产物名可读', true, Boolean(DIST.js && DIST.css));
+    check('线上 index.html 引用的 JS = 本地构建', DIST.js, liveJs);
+    check('线上 index.html 引用的 CSS = 本地构建', DIST.css, liveCss);
+    console.log(`       本地 ${DIST.js} / ${DIST.css}`);
+    console.log(`       线上 ${liveJs} / ${liveCss}`);
+    // 裸 URL（无 cache-buster）是真实用户拿到的入口，可能被 CDN 缓存住 —— 单独提示，不算失败
+    const plain = await (await fetch(`${staticHost.replace(/\/$/, '')}/index.html`)).text();
+    const plainJs = (plain.match(/index-[A-Za-z0-9_-]+\.js/) || [''])[0];
+    if (plainJs !== DIST.js) {
+      console.log(`  warn 裸 /index.html 仍被 CDN 缓存（${plainJs}）—— 真实用户会晚一步拿到新版，等缓存过期或控制台刷新缓存`);
+    } else {
+      console.log('  ok   裸 /index.html 已是新版（CDN 已回源）');
+      pass++;
+    }
+    // 新 CSS 是否真的含本轮修复（防“传了但传的是旧 dist”）
+    const cssText = await (await fetch(`${staticHost.replace(/\/$/, '')}/assets/${liveCss}`)).text();
+    check('线上 CSS 含 [aria-selected] 选中态规则', true, cssText.includes("[aria-selected='true']"));
+    // 只看选择器本体，不用裸词匹配 —— 注释里出现这个词不算问题（构建会去注释，但别赌）
+    check('线上 CSS 已无死选择器 [aria-current]', false, /\[aria-current[\]=]/.test(cssText));
+    check('线上 CSS 已无死选择器 .adm-dock-btn[aria-selected]', false, /\.adm-dock-btn\[aria-selected/.test(cssText));
+  }
+  console.log(`       实际运行 bundle：${DIST.js}`);
 
   // ── 1. 登录门 a11y（P2-7） ──────────────────────────────
   console.log('\n[1] 登录门 a11y');
@@ -124,6 +162,11 @@ async function publicCount() {
   await page.reload();
   const pwInput = page.locator('.adm-reveal input');
   await pwInput.waitFor({ timeout: 20000 });
+  // 真正在跑的是哪份 bundle —— 前面是“线上文件对不对”，这里是“浏览器实际执行的那份对不对”
+  check('浏览器实际加载的 JS = 本地构建', true, await page.evaluate(
+    (want) => [...document.querySelectorAll('script[src]')].some((s) => s.getAttribute('src').includes(want)),
+    DIST.js,
+  ));
   check('口令框自动聚焦', '管理口令', await page.evaluate(() => document.activeElement?.getAttribute('aria-label')));
   check('口令框 aria 名', '管理口令', await pwInput.getAttribute('aria-label'));
   check('口令框 autocomplete', 'current-password', await pwInput.getAttribute('autocomplete'));
@@ -163,6 +206,41 @@ async function publicCount() {
   });
   await page.waitForTimeout(300);
 
+  // ── 3.5 选中态是否真的渲染（死选择器回归防护）───────────
+  // 上一轮教训：只断言 aria-selected 属性存在 → 属性在、CSS 选择器写错（[aria-current]）
+  // → 样式根本不生效，测试全绿而用户看到零高亮。状态断言必须落到 getComputedStyle。
+  console.log('\n[3.5] 选中态渲染（属性在 ≠ 画出来了）');
+  {
+    const diff = await page.evaluate(() => {
+      const on = document.querySelector('.adm-ritem[aria-selected="true"]');
+      const off = document.querySelector('.adm-ritem[aria-selected="false"]');
+      if (!on || !off) return { error: `对照缺失 on=${!!on} off=${!!off}` };
+      const read = (el) => {
+        const cs = getComputedStyle(el);
+        return {
+          bg: cs.backgroundColor,
+          weight: cs.fontWeight,
+          borderLeft: cs.borderLeftColor,
+        };
+      };
+      const a = read(on);
+      const b = read(off);
+      return { diff: ['bg', 'weight', 'borderLeft'].filter((k) => a[k] !== b[k]), on: a, off: b };
+    });
+    check('左栏对照元素齐全（≥2 条）', undefined, diff.error);
+    check('左栏选中项背景已着色', true, (diff.diff || []).includes('bg'));
+    check('左栏选中项左强调条已着色', true, (diff.diff || []).includes('borderLeft'));
+    console.log(`       选中项 bg=${diff.on?.bg} / 未选中 bg=${diff.off?.bg}`);
+    check('顶部页签选中态已渲染', true, await page.evaluate(() => {
+      const on = document.querySelector('#adm-tab-articles');
+      const off = document.querySelector('#adm-tab-projects');
+      if (!on || !off) return false;
+      const a = getComputedStyle(on);
+      const b = getComputedStyle(off);
+      return a.backgroundColor !== b.backgroundColor || a.color !== b.color || a.fontWeight !== b.fontWeight;
+    }));
+  }
+
   // ── 4. 新建不落库（P0-2） ───────────────────────────────
   console.log('\n[4] 新建不落库（P0-2）');
   const writesBeforeNew = writes.length;
@@ -196,6 +274,9 @@ async function publicCount() {
 
   // ── 6. 客户端校验拦截，不发请求（P2-4 / P2-5） ──────────
   console.log('\n[6] 校验拦截零请求（P2-4 / P2-5）');
+  const titleBorderNormal = await page.evaluate(
+    () => getComputedStyle(document.querySelector('.adm-input--title')).borderBottomColor,
+  );
   await page.locator('.adm-input--title').fill('');
   await page.waitForTimeout(200);
   const writesBeforeSave = writes.length;
@@ -203,6 +284,35 @@ async function publicCount() {
   await page.waitForTimeout(800);
   check('空标题保存被拦下（无写请求）', writesBeforeSave, writes.length);
   check('字段级错误可见', true, (await page.locator('.adm-field-error').count()) > 0);
+  // 红边是否真的画出来了：class 在 ≠ 样式生效。
+  // 而且要比「出错前 vs 出错后」的实际边框色，不能只看类名存不存在。
+  {
+    const after = await page.evaluate(
+      () => getComputedStyle(document.querySelector('.adm-input--title')).borderBottomColor,
+    );
+    check('出错标题框底线变红', true, after !== titleBorderNormal && after !== 'rgba(0, 0, 0, 0)');
+    console.log(`       标题底线：正常 ${titleBorderNormal} → 出错 ${after}`);
+  }
+  // 通用字段（SchemaForm 字段）的红框同样落到计算样式。
+  // 注意：标题现在也带 .adm-fv--error（自定义字段的红边在 CSS 里单独处理，
+  // border-top 按设计就是透明的），所以不能只看 border-top —— 要看该字段
+  // 到底有没有红色提示（通用字段是四边红框，标题是红色底线）。
+  check('每个报错字段都有红色视觉提示', true, await page.evaluate(() => {
+    const wrappers = [...document.querySelectorAll('.adm-fv--error')];
+    if (!wrappers.length) return false;
+    // 用探针元素把 var(--danger) 归一成 rgb，不硬编码颜色
+    const probe = document.createElement('span');
+    probe.style.color = 'var(--danger)';
+    document.body.appendChild(probe);
+    const danger = getComputedStyle(probe).color;
+    probe.remove();
+    return wrappers.every((w) => {
+      const el = w.querySelector('.adm-input, .adm-textarea');
+      if (!el) return false;
+      const cs = getComputedStyle(el);
+      return cs.borderBottomColor === danger || cs.borderTopColor === danger;
+    });
+  }));
   check('焦点落到出错字段', true, await page.evaluate(() => document.activeElement?.classList.contains('adm-input--title') ?? false));
   const errText = await page.locator('.adm-field-error').first().textContent();
   console.log(`       错误文案：${(errText || '').trim()}`);

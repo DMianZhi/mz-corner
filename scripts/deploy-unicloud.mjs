@@ -12,12 +12,23 @@
  *   --url <URL化地址>               部署后的自检地址，默认由服务空间 id 推导
  *   --cli <路径>                    HBuilderX cli 可执行文件路径
  *   --skip-build                    跳过 build:unicloud（复用现有产物）
+ *   --skip-client                   跳过前端构建（复用现有 client/dist）
+ *   --skip-hosting                  跳过前端静态托管上传
  *   --skip-db                       跳过数据库集合 Schema 上传
  *   --skip-verify                   跳过部署后自检
  *
  * 前置:
  *   1. HBuilderX 至少打开过仓库根目录一次（`cli project list` 里能看到项目名）
  *   2. uniCloud-<provider> 已关联服务空间（HBuilderX 里关联一次即可，之后不再需要界面操作）
+ *   3. .env 里配好 UNICLOUD_SPACE_ID（前端静态托管上传需要它）
+ *
+ * 踩过的坑（2026-09-23）：这个脚本一度只传云函数，**不管前端静态托管**。
+ *   于是「改了前端 → 跑 deploy:unicloud → 以为上线了」实际线上还是旧页面。
+ *   更阴的是 build:unicloud 只把 client/dist 拷进云函数，**从不构建前端**：
+ *   忘了单独跑 pnpm build，传上去的就是上一版 dist（连文件名都还是旧的）。
+ *   现在：默认构建前端 → 传云函数 → 传静态托管，一步到位。
+ *   另注：静态托管的 index.html 有 CDN 缓存（实测 age 381 / cachetime 1119），
+ *   刚传完裸 URL 可能仍是旧入口，属正常，等回源或用控制台刷新缓存。
  *
  * 说明:
  *   官方文档称 uniCloud CLI「仅适用于 linux 命令行调用」，实测 Windows 桌面端自带的
@@ -58,6 +69,22 @@ if (!cliPath) {
   );
 }
 console.log(`→ HBuilderX cli: ${cliPath}`);
+
+// 0. 前端构建（必须先于 build:unicloud —— 后者只是把 client/dist 拷进云函数，不负责构建）
+if (!args["skip-build"] && !args["skip-client"]) {
+  console.log("→ 构建前端产物 client/dist");
+  const build = spawnSync("pnpm", ["--filter", "@mz-corner/client", "build"], {
+    cwd: root,
+    stdio: "inherit",
+    shell: true,
+  });
+  if (build.status !== 0) fail("前端构建失败（可用 --skip-client 复用现有 client/dist）");
+} else {
+  console.log("→ 跳过前端构建（复用现有 client/dist）");
+}
+if (!existsSync(path.join(root, "client/dist/index.html"))) {
+  fail("缺少 client/dist/index.html —— 前端产物不存在，先跑一次 pnpm run build");
+}
 
 // 1. 构建产物（含自包含检查，云端缺依赖会在这里直接失败）
 if (!args["skip-build"]) {
@@ -141,7 +168,33 @@ const uploadArgs = [
 ];
 runCli(cliPath, uploadArgs);
 
-// 6. 部署后自检（地址默认从服务空间 id 推导）
+// 6. 上传前端静态资源到前端网页托管
+//    这是 SPA 的正式入口（云函数域名有 gzip 截断 bug，只能备用，详见 deploy/unicloud/README.md）。
+//    必须省略 --prefix：传了会被 Windows 路径规范化搞坏，云端凭空多出 C: 目录树。
+if (!args["skip-hosting"]) {
+  const spaceId = args.space || process.env.UNICLOUD_SPACE_ID;
+  if (!spaceId) {
+    console.log("⚠ 未配置 UNICLOUD_SPACE_ID（也没有 --space），跳过静态托管上传 —— 前端不会更新！");
+  } else {
+    console.log(`→ 上传前端静态资源到托管空间 ${spaceId}`);
+    runCli(cliPath, [
+      "hosting",
+      "deploy",
+      "--prj",
+      projectName,
+      "--provider",
+      provider,
+      "--space",
+      spaceId,
+      "--source",
+      "client/dist",
+    ]);
+  }
+} else {
+  console.log("→ 跳过静态托管上传");
+}
+
+// 7. 部署后自检（地址默认从服务空间 id 推导）
 if (!args["skip-verify"]) {
   const url = args.url || deriveVerifyUrl(cliPath);
   if (url) {
@@ -156,6 +209,7 @@ if (!args["skip-verify"]) {
 }
 
 console.log("\n✔ 部署流程结束。");
+console.log("  云函数 + 前端静态托管均已上传；静态托管的 index.html 有 CDN 缓存，刚传完可能仍是旧入口，等回源即可。");
 console.log("  URL 化路径（/mz-api）与 SEED_TOKEN 环境变量仍需在 Web 控制台配置（CLI 不提供这两项）。");
 console.log("  首次部署后还要把数据灌进云数据库：pnpm run export:init-data 生成 init_data 文件，");
 console.log("  再用 cli cloud functions --initdatabase 灌入（详见 deploy/unicloud/README.md）。");
