@@ -95,7 +95,7 @@ function CommentDetail(props: {
         focusFirstError(props.fields, labelErrors);
         toast.error(`保存失败，有 ${Object.keys(labelErrors).length} 处需要修正`);
       } else {
-        toast.error(message);
+        toast.error(message, { action: { label: '重试', onClick: () => void save() } });
       }
     } finally {
       setSaving(false);

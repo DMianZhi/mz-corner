@@ -92,7 +92,9 @@ export function SiteConfigPanel(props: {
         props.onAuthLost();
         return;
       }
-      toast.error(error instanceof Error ? error.message : '保存失败');
+      toast.error(error instanceof Error ? error.message : '保存失败', {
+        action: { label: '重试', onClick: () => void save() },
+      });
     } finally {
       setSaving(false);
     }

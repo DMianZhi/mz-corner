@@ -90,7 +90,7 @@ function ProjectDetail(props: {
         focusFirstError(props.fields, fieldErrors);
         toast.error(`保存失败，有 ${Object.keys(fieldErrors).length} 处需要修正`);
       } else {
-        toast.error(message);
+        toast.error(message, { action: { label: '重试', onClick: () => void save() } });
       }
     } finally {
       setSaving(false);

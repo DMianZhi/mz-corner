@@ -131,7 +131,7 @@ html.light .adm-shell {
 .adm-tab-count {
   font-style: normal;
   margin-left: 5px;
-  font-size: 10.5px;
+  font-size: 11.5px;
   color: var(--text-3);
 }
 
@@ -243,7 +243,7 @@ html.light .adm-shell {
 .adm-btn--sm.adm-btn--primary {
   padding: 7px 13px;
   border-radius: 999px;
-  font-size: 10.5px;
+  font-size: 11.5px;
 }
 .adm-btn--icon {
   padding: 8px;

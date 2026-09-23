@@ -92,7 +92,9 @@ export function ArticlesPanel(props: {
         props.onAuthLost();
         return null;
       }
-      toast.error(error instanceof Error ? error.message : '保存失败');
+      toast.error(error instanceof Error ? error.message : '保存失败', {
+        action: { label: '重试', onClick: () => void saveNew(docId, values) },
+      });
       return null;
     }
   };
