@@ -28,6 +28,8 @@ export function SaveDock(props: {
   disabled?: boolean;
   /** 保存按钮之前的插槽（站点设置用它放「弹性占位 + 放弃改动」） */
   before?: ReactNode;
+  /** 状态文案之前的插槽（文章用它放三态切换按钮组） */
+  leading?: ReactNode;
 }) {
   const disabled = props.disabled ?? !props.dirty;
   const status = props.status ?? (props.dirty ? '有改动' : '已同步');
@@ -35,6 +37,7 @@ export function SaveDock(props: {
 
   return (
     <div className="adm-dock">
+      {props.leading}
       <span
         className="label-site"
         style={

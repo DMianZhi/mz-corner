@@ -26,6 +26,8 @@ import {
   newLocalId,
   removePending,
 } from './draftStore';
+import { isAuthLost } from './savePlan';
+import { resolveSelection } from './selection';
 import { EmptyState, Icon, LinkButton, Rail, RailItem } from './ui';
 
 type ArticleFields = ContentField[];
@@ -55,9 +57,10 @@ export function ArticlesPanel(props: {
   // 本地草稿（未落库）排在真实文档后面，一样可以选中编辑
   const allDocs: ContentDocument[] = [...ordered, ...pendingList];
 
-  // 未选中时默认落到第一条；selectedId 失效（文档被删）同样回退
-  const selected =
-    allDocs.find((doc) => doc._id === selectedId) ?? allDocs[0] ?? null;
+  // 未选中时默认落到第一条；selectedId 失效（文档被删）同样回退。
+  // 回退规则与其余三个面板共用一份纯函数 —— 审计 P3-7 的「首屏左栏不亮」
+  // 就是各面板各写一遍回退判定、写法不一致导致的。
+  const selected = resolveSelection(allDocs, selectedId);
   const effectiveSelectedId = selected?._id ?? null;
 
   const create = () => {
@@ -88,7 +91,7 @@ export function ArticlesPanel(props: {
       await props.onReload();
       return id;
     } catch (error) {
-      if (error instanceof Error && error.name === 'Unauthorized') {
+      if (isAuthLost(error)) {
         props.onAuthLost();
         return null;
       }
@@ -186,7 +189,7 @@ async function removeArticle(
     toast.success('已删除');
     await done();
   } catch (error) {
-    if (error instanceof Error && error.name === 'Unauthorized') {
+    if (isAuthLost(error)) {
       onAuthLost();
       return;
     }

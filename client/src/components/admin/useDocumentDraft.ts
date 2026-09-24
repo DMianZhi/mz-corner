@@ -24,6 +24,8 @@ export function useDocumentDraft(options: {
   fields: ContentField[];
   /** 本地新建（未落库）文档的草稿 key，默认用 document._id */
   draftKey?: string;
+  /** 本地新建：文档还没落库，「已保存」态不存在，dirty 恒真 */
+  isNew?: boolean;
 }) {
   const { collection, document, fields } = options;
   const draftKey = options.draftKey ?? document._id;
@@ -39,7 +41,7 @@ export function useDocumentDraft(options: {
   // draftStore 变化时重渲：dirty 由此推导，左栏的草稿点也靠它
   useSyncExternalStore(subscribeDrafts, draftTotal);
 
-  const dirty = getDraft(collection, draftKey) !== null;
+  const dirty = Boolean(options.isNew) || getDraft(collection, draftKey) !== null;
 
   // 副作用留在 updater 之外：updater 在渲染期执行，里面写草稿会同步通知订阅方改状态
   const update = (name: string, value: unknown) => {

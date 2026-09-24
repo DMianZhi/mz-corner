@@ -18,23 +18,22 @@
 // - 字段级错误：SchemaForm/FieldRow 渲染红框与错误文字，标题错误贴标题框（P2-4）
 // - 客户端校验：保存前按 schema 校验（required/max/日期格式），就地报错不发请求（P2-5）
 // - Ctrl/Cmd+S 保存；「放弃改动」从站点设置面板补齐到文章（P4）
+//
+// 后台重构 T6：草稿状态与保存编排改走共享单元（useDocumentDraft / useSaveAction /
+// useCtrlS / SaveDock），文章独有的部分（三态切换、正文自动增高、ResizeObserver
+// 宽度重算、本地新建的 local: 虚拟文档）**全部原样保留**。
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { toast } from 'sonner';
 import { Markdown } from '@/components/Markdown';
 import { updateContent, type ContentDocument, type ContentField } from '@/services/admin-api';
-import {
-  asText,
-  focusFirstError,
-  mapLabelErrorsToFields,
-  SchemaForm,
-  validateValues,
-  type FieldErrors,
-} from './SchemaForm';
+import { asText, SchemaForm } from './SchemaForm';
 import { StatusText } from './status';
-import { clearDraft, getDraft, setDraft } from './draftStore';
+import { clearDraft } from './draftStore';
+import { SaveDock } from './SaveDock';
+import { useCtrlS } from './useCtrlS';
+import { useDocumentDraft } from './useDocumentDraft';
+import { useSaveAction } from './useSaveAction';
 import {
   Badge,
-  Button,
   DangerConfirm,
   FieldValue,
   fitTextarea,
@@ -53,13 +52,6 @@ const MODES: Array<{ value: EditorMode; label: string; icon: React.ReactNode }> 
   { value: 'preview', label: '预览', icon: <Icon.Eye size={14} /> },
 ];
 
-/** 从文档抽出可编辑字段的当前值（其余系统字段如 viewCount 不参与编辑） */
-function pickValues(fields: ContentField[], document: ContentDocument): Record<string, unknown> {
-  const values: Record<string, unknown> = {};
-  for (const field of fields) values[field.name] = document[field.name];
-  return values;
-}
-
 export function ArticleEditor(props: {
   article: ContentDocument;
   fields: ContentField[];
@@ -76,90 +68,43 @@ export function ArticleEditor(props: {
 }) {
   const draftKey = props.article._id;
 
-  // 初始化顺序：草稿 > 文档当前值。草稿存在说明上次编辑没保存就离开了，恢复它。
-  const [values, setValues] = useState<Record<string, unknown>>(() => {
-    const draft = getDraft('articles', draftKey);
-    if (draft) return draft.values;
-    return pickValues(props.fields, props.article);
+  // 草稿优先初始化 + 统一订阅 + 清字段错误都收在 hook 里（审计 P0-1）。
+  // isNew 透传：本地新建的虚拟文档还没有「已保存」态，dirty 恒真。
+  // ⚠️ 本组件由 ArticlesPanel 以 key={selected._id} 挂载 —— hook 的 values 只在挂载时
+  // 读一次，少了 key 会把上一条的值整份写进当前条草稿。
+  const draft = useDocumentDraft({
+    collection: 'articles',
+    document: props.article,
+    fields: props.fields,
+    isNew: props.isNew,
   });
+  const { values, update, dirty, errors, setErrors } = draft;
+
   const [mode, setMode] = useState<EditorMode>('edit');
-  const [saving, setSaving] = useState(false);
-  const [errors, setErrors] = useState<FieldErrors>({});
 
-  // 草稿这层「真相」独立于 React 状态：面板卸载（切标签）后依然在。
-  // dirty 用「草稿是否存在」推导 —— set/clear 都会触发 draftStore 通知，订阅方自动重渲。
-  const dirty = props.isNew ? true : getDraft('articles', draftKey) !== null;
-
-  // 每次编辑都写草稿。注意 isNew 的虚拟文档也存草稿（key=articles:local:xxx），
-  // 保存成功后由父级 removePending + clearDraft 一并清掉。
-  // 副作用（setErrors / 写草稿）必须留在 updater 之外：updater 在 React 渲染期执行，
-  // 在里面写草稿会同步通知订阅方（顶栏「N 未保存」徽标）改状态，React 会报
-  // 「Cannot update a component while rendering a different component」。
-  const update = (name: string, value: unknown) => {
-    const next = { ...values, [name]: value };
-    setValues(next);
-    // 就地清掉该字段的错误：错误只在保存时校验，编辑期间保持安静
-    if (errors[name]) {
-      const cleared: FieldErrors = { ...errors };
-      delete cleared[name];
-      setErrors(cleared);
-    }
-    setDraft('articles', draftKey, next);
-  };
-
-  const save = async () => {
-    // 客户端先行校验（schema 推导：required/max/日期/数字），就地报错、不发请求
-    const clientErrors = validateValues(props.fields, values);
-    if (Object.keys(clientErrors).length > 0) {
-      setErrors(clientErrors);
-      focusFirstError(props.fields, clientErrors);
-      toast.error(`保存失败，有 ${Object.keys(clientErrors).length} 处需要修正`);
-      return;
-    }
-    setSaving(true);
-    try {
+  // 保存编排（客户端校验 → 字段定位 → 服务端错误映射 → 重试 → 401 退登录门）与
+  // 其余三个面板共用一份。
+  // ⚠️ onSaved 留在 save 内、clearDraft 之后 —— 改前就是这个顺序，**不要**挪到 onSuccess：
+  // 「已保存」提示必须晚于列表刷新，否则会出现「提示已保存但列表还是旧的」。
+  const action = useSaveAction({
+    fields: props.fields,
+    values,
+    setErrors,
+    onAuthLost: props.onAuthLost,
+    save: async () => {
       if (props.isNew) {
         if (!props.onSaveNew) throw new Error('本地新建缺少落库回调');
         await props.onSaveNew(values);
-      } else {
-        await updateContent('articles', draftKey, values);
-        clearDraft('articles', draftKey);
-        await props.onSaved();
-      }
-      setErrors({});
-      toast.success('已保存');
-    } catch (error) {
-      if (error instanceof Error && error.name === 'Unauthorized') {
-        props.onAuthLost();
         return;
       }
-      // 服务端错误文案形如「标题不能为空」「发布日期长度不能超过 30 字」——
-      // 按 label 反查字段名，把错误落到字段上；匹配不到再退回 toast
-      const message = error instanceof Error ? error.message : '保存失败';
-      const labelErrors = mapLabelErrorsToFields(props.fields, message);
-      if (labelErrors) {
-        setErrors(labelErrors);
-        focusFirstError(props.fields, labelErrors);
-        toast.error(`保存失败，有 ${Object.keys(labelErrors).length} 处需要修正`);
-      } else {
-        toast.error(message);
-      }
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // Ctrl/Cmd+S：写作时手不离键盘
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
-        event.preventDefault();
-        if (!saving) void save();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+      await updateContent('articles', draftKey, values);
+      clearDraft('articles', draftKey);
+      await props.onSaved();
+    },
+    successMessage: '已保存',
   });
+
+  useCtrlS({ onSave: () => void action.run(), disabled: action.saving });
 
   const status = asText(values.status);
   const title = asText(values.title);
@@ -305,48 +250,51 @@ export function ArticleEditor(props: {
         </FieldValue>
       )}
 
-      {/* 浮动工具条 */}
-      <div className="adm-dock">
-        {MODES.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            className="adm-dock-btn"
-            aria-pressed={mode === item.value}
-            onClick={() => setMode(item.value)}
-          >
-            {item.icon}
-            {item.label}
-          </button>
-        ))}
-        <span className="adm-dock-sep" />
-        <span className="label-site" style={{ padding: '0 8px', minWidth: 62, textAlign: 'center' }}>
-          {dirty ? '有改动' : '已同步'}
-        </span>
-        {props.isNew ? (
-          <LinkButton onClick={props.onDiscard}>放弃</LinkButton>
-        ) : (
+      {/* 浮动工具条 —— 与其余三个面板同一个 SaveDock。
+          三态按钮组走 leading（排在状态文案之前）、放弃/删除走 before（排在保存按钮之前），
+          顺序与改前逐字一致。
+          ⚠️ 保存按钮**刻意不设 disabled**：本地新建时 dirty 恒真，已落库文章也允许
+          重复保存（改前就没有 disabled）。SaveDock 的 disabled 缺省是 !dirty，
+          所以这里必须显式传 false，否则保存按钮会被永久禁用。 */}
+      <SaveDock
+        leading={
           <>
-            {/* 已落库文章：放弃（丢弃草稿）与删除并列 —— 之前只渲染了删除，
-                onDiscard 传了却没有入口，改完只能靠保存或刷新才能脱身 */}
-            <LinkButton onClick={props.onDiscard} disabled={!dirty}>
-              放弃
-            </LinkButton>
-            {props.onDelete ? (
-              <DangerConfirm size="sm" label="删除" confirmLabel="确认删除" onConfirm={props.onDelete} />
-            ) : null}
+            {MODES.map((item) => (
+              <button
+                key={item.value}
+                type="button"
+                className="adm-dock-btn"
+                aria-pressed={mode === item.value}
+                onClick={() => setMode(item.value)}
+              >
+                {item.icon}
+                {item.label}
+              </button>
+            ))}
+            <span className="adm-dock-sep" />
           </>
-        )}
-        <Button
-          variant="primary"
-          size="sm"
-          icon={<Icon.Save size={14} />}
-          loading={saving}
-          onClick={save}
-        >
-          保存
-        </Button>
-      </div>
+        }
+        status={dirty ? '有改动' : '已同步'}
+        disabled={false}
+        saving={action.saving}
+        onSave={() => void action.run()}
+        before={
+          props.isNew ? (
+            <LinkButton onClick={props.onDiscard}>放弃</LinkButton>
+          ) : (
+            <>
+              {/* 已落库文章：放弃（丢弃草稿）与删除并列 —— 之前只渲染了删除，
+                  onDiscard 传了却没有入口，改完只能靠保存或刷新才能脱身 */}
+              <LinkButton onClick={props.onDiscard} disabled={!dirty}>
+                放弃
+              </LinkButton>
+              {props.onDelete ? (
+                <DangerConfirm size="sm" label="删除" confirmLabel="确认删除" onConfirm={props.onDelete} />
+              ) : null}
+            </>
+          )
+        }
+      />
     </div>
   );
 }

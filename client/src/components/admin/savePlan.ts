@@ -25,6 +25,16 @@ export function errorCount(errors: FieldErrors): number {
   return Object.keys(errors).length;
 }
 
+/**
+ * 会话是否已失效（admin-api 在 401 时抛 name='Unauthorized' 的 Error）。
+ * 抽出来是因为这个判定原先在 6 个文件里各写一遍 —— 包括面板自己发起的
+ * create / delete / 本地新建落库（那些不走 useSaveAction），漏改一处就会
+ * 把「请重新登录」显示成普通报错。
+ */
+export function isAuthLost(error: unknown): boolean {
+  return error instanceof Error && error.name === 'Unauthorized';
+}
+
 /** 保存前的客户端校验（用服务端下发的同一份 schema 预检，审计 P2-5） */
 export function planSave(options: {
   fields: ContentField[];
@@ -45,7 +55,7 @@ export function planSave(options: {
  */
 export function planFailure(options: { fields: ContentField[]; error: unknown }): FailurePlan {
   const { error } = options;
-  if (error instanceof Error && error.name === 'Unauthorized') return { kind: 'auth-lost' };
+  if (isAuthLost(error)) return { kind: 'auth-lost' };
 
   const message = error instanceof Error ? error.message : '保存失败';
   const errors = mapLabelErrorsToFields(options.fields, message);
