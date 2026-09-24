@@ -3,7 +3,7 @@
 // 红线：全程不点「保存」「删除」等任何写操作 —— 这是生产数据。
 // 只验证「登录 → 四个面板能读到数据 → 编辑器可用 → 明暗主题」。
 const fs = require('node:fs');
-const { chromium } = require('C:/Users/admin/.wpscomate/agent/skills/custom/career-ops/node_modules/playwright');
+const { chromium } = require('./e2e/lib/playwright.cjs');
 
 // 站点地址不入库：仓库约定真实 space id 只留在本地 .env（该文件已 gitignore）。
 // 取根目录 .env 的 UNICLOUD_STATIC_HOST，或显式用 SMOKE_BASE 覆盖。

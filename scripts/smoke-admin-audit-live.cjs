@@ -6,7 +6,7 @@
 // 用法：ADMIN_PASSWORD=<线上口令> node scripts/smoke-admin-audit-live.cjs
 // 站点地址与 API 地址取自本地 .env / client/.env.production.local（均已 gitignore）。
 const fs = require('node:fs');
-const { chromium } = require('C:/Users/admin/.wpscomate/agent/skills/custom/career-ops/node_modules/playwright');
+const { chromium } = require('./e2e/lib/playwright.cjs');
 
 function readEnvFile(file, key) {
   try {

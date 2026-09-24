@@ -1,5 +1,5 @@
 // 给三套 demo 出明暗截图 + 收集控制台报错
-const { chromium } = require('C:/Users/admin/.wpscomate/agent/skills/custom/career-ops/node_modules/playwright');
+const { chromium } = require('./e2e/lib/playwright.cjs');
 const path = require('node:path');
 const OUT = path.join(process.cwd(), '.wpscomate/demo-shots');
 

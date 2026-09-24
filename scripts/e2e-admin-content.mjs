@@ -9,21 +9,9 @@ if (!PW) throw new Error('缺少 ADMIN_PASSWORD 环境变量（管理口令不�
 // 用 Object.create(null) 构造空对象：避免源码里出现容易看漏的空对象字面量
 const emptyBody = Object.create(null);
 
-let pass = 0;
-let fail = 0;
-const failures = [];
+import harness from './e2e/lib/harness.cjs';
 
-function check(name, expected, actual) {
-  if (expected === actual) {
-    console.log(`  ok   ${name} → ${actual}`);
-    pass++;
-  } else {
-    console.log(`  FAIL ${name} → 期望 ${expected}，实际 ${actual}`);
-    fail++;
-    failures.push(name);
-  }
-}
-
+const { checkStrict: check, stats } = harness;
 async function req(method, path, opts = {}) {
   const headers = {};
   if (opts.token) headers['x-admin-session'] = opts.token;
@@ -229,6 +217,7 @@ check(
 console.log('\n── 10. 登出 ────────────────────────────────');
 check('登出状态', 200, (await req('POST', '/api/admin/logout', { token })).status);
 
+const { pass, fail, failures } = stats();
 console.log(`\n══ 结果：${pass} 通过 / ${fail} 失败 ══`);
 if (fail > 0) {
   console.log('失败项：' + failures.join(' | '));

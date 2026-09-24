@@ -1,7 +1,7 @@
 // 滚动条与布局的目视验收截图：干净视图 + 右侧滚动条放大裁剪
 const fs = require('node:fs');
 const path = require('node:path');
-const { chromium } = require('C:/Users/admin/.wpscomate/agent/skills/custom/career-ops/node_modules/playwright');
+const { chromium } = require('./e2e/lib/playwright.cjs');
 const BASE = 'http://localhost:5199';
 const PW = process.env.ADMIN_PASSWORD;
 if (!PW) throw new Error('缺少 ADMIN_PASSWORD');

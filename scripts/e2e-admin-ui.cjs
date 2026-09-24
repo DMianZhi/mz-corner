@@ -2,35 +2,14 @@
 //
 // 验证的不只是「画出来了」：登录门、工作台骨架（左索引 + 右详情，整页不滚）、
 // 编辑三态、真实保存落库、四个内容面板、明暗双主题，以及全程零控制台错误。
-const fs = require('node:fs');
-const { chromium } = require('C:/Users/admin/.wpscomate/agent/skills/custom/career-ops/node_modules/playwright');
-
-const BASE = process.env.E2E_BASE || 'http://localhost:5199';
+const {
+  BASE, OUT, checkStrict: check, launch, requirePassword, stats,
+} = require('./e2e/lib/harness.cjs');
 const API = 'http://127.0.0.1:8900/mz-api';
 // 口令不入库：从环境变量读（export ADMIN_PASSWORD=... 后运行）
-const PW = process.env.ADMIN_PASSWORD;
-if (!PW) throw new Error('缺少 ADMIN_PASSWORD 环境变量（管理口令不写入仓库）');
-const OUT = 'C:/Users/admin/data/work/blog/mz-corner/.wpscomate/e2e-shots';
-fs.mkdirSync(OUT, { recursive: true });
-
-let pass = 0;
-let fail = 0;
-const failures = [];
-function check(name, expected, actual) {
-  if (expected === actual) {
-    console.log(`  ok   ${name}`);
-    pass++;
-  } else {
-    console.log(`  FAIL ${name} → 期望 ${JSON.stringify(expected)}，实际 ${JSON.stringify(actual)}`);
-    fail++;
-    failures.push(name);
-  }
-}
-
+const PW = requirePassword();
 (async () => {
-  const browser = await chromium.launch();
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-  const page = await ctx.newPage();
+  const { browser, ctx, page } = await launch({ viewport: { width: 1440, height: 900 } });
   const consoleErrors = [];
   page.on('console', (m) => {
     if (m.type() === 'error') consoleErrors.push(m.text());
@@ -286,6 +265,7 @@ function check(name, expected, actual) {
   check('无控制台错误', 0, meaningful.length);
 
   await browser.close();
+  const { pass, fail, failures } = stats();
   console.log(`\n══ 结果：${pass} 通过 / ${fail} 失败 ══`);
   if (fail > 0) {
     console.log('失败项：' + failures.join(' | '));

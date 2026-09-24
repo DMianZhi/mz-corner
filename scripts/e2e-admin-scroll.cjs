@@ -2,29 +2,13 @@
 //
 // 方案 B 之后滚动容器有两个（左索引 .adm-rail-list / 右详情 .adm-pane），
 // 整页依然必须零滚动。口令不入库：从环境变量读（export ADMIN_PASSWORD=... 后运行）
-const fs = require('node:fs');
-const { chromium } = require('C:/Users/admin/.wpscomate/agent/skills/custom/career-ops/node_modules/playwright');
-
-const BASE = process.env.E2E_BASE || 'http://localhost:5199';
-const PW = process.env.ADMIN_PASSWORD;
-if (!PW) throw new Error('缺少 ADMIN_PASSWORD 环境变量（管理口令不写入仓库）');
+const { BASE, checkStrict: check, ensureDir, launch, requirePassword, stats } = require('./e2e/lib/harness.cjs');
+// 口令不入库：从环境变量读（export ADMIN_PASSWORD=... 后运行）
+const PW = requirePassword();
 const OUT = 'C:/Users/admin/data/work/blog/mz-corner/.wpscomate/scroll-shots';
-fs.mkdirSync(OUT, { recursive: true });
-
-let pass = 0;
-let fail = 0;
-const failures = [];
-function check(name, expected, actual) {
-  if (expected === actual) {
-    console.log('  ok   ' + name);
-    pass++;
-  } else {
-    console.log('  FAIL ' + name + ' → 期望 ' + JSON.stringify(expected) + '，实际 ' + JSON.stringify(actual));
-    fail++;
-    failures.push(name);
-  }
-}
+ensureDir(OUT);
 function report() {
+  const { pass, fail, failures } = stats();
   console.log('');
   console.log('══ 滚动自检：' + pass + ' 通过 / ' + fail + ' 失败 ══');
   if (failures.length) console.log('失败项：\n  · ' + failures.join('\n  · '));
@@ -64,9 +48,7 @@ function metrics(page) {
 }
 
 (async () => {
-  const browser = await chromium.launch();
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-  const page = await ctx.newPage();
+  const { browser, ctx, page } = await launch({ viewport: { width: 1440, height: 900 }, outDir: OUT });
   const errs = [];
   page.on('pageerror', (e) => errs.push(String(e)));
   page.on('console', (m) => {
@@ -262,7 +244,7 @@ function metrics(page) {
 
   report();
   await browser.close();
-  process.exit(fail === 0 ? 0 : 1);
+  process.exit(stats().fail === 0 ? 0 : 1);
 })().catch((e) => {
   console.error('运行失败：', e);
   report();

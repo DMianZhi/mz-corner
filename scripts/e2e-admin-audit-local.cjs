@@ -6,67 +6,12 @@
 // 用法：ADMIN_PASSWORD=mz-local-e2e node scripts/e2e-admin-audit-local.cjs
 // 前置：node scripts/local-unicloud-harness.mjs full 8900（带 ADMIN_PASSWORD）
 //       DEV_PORT=5199 API_DEV_TARGET=http://127.0.0.1:8900/mz-api pnpm --filter @mz-corner/client dev
-const fs = require('node:fs');
-const { chromium } = require('C:/Users/admin/.wpscomate/agent/skills/custom/career-ops/node_modules/playwright');
+const { BASE, OUT, check, visualDiff, launch, stats } = require('./e2e/lib/harness.cjs');
 
-const BASE = process.env.E2E_BASE || 'http://localhost:5199';
+// audit-local 自带本地默认口令（其余脚本靠 harness 的 requirePassword() 守卫）
 const PW = process.env.ADMIN_PASSWORD || 'mz-local-e2e';
-const OUT = 'C:/Users/admin/data/work/blog/mz-corner/.wpscomate/e2e-shots';
-fs.mkdirSync(OUT, { recursive: true });
-
-let pass = 0;
-let fail = 0;
-const failures = [];
-function check(name, expected, actual) {
-  const ok = JSON.stringify(expected) === JSON.stringify(actual);
-  if (ok) {
-    console.log(`  ok   ${name}`);
-    pass++;
-  } else {
-    console.log(`  FAIL ${name} → 期望 ${JSON.stringify(expected)}，实际 ${JSON.stringify(actual)}`);
-    fail++;
-    failures.push(name);
-  }
-}
-
-/**
- * 「选中态真的渲染出来了吗」——比较选中元素与未选中元素的**计算样式**。
- *
- * 教训：之前这里只断言 aria-selected 属性存在，属性是 React 输出的、永远是对的，
- * 而 CSS 选择器写成了 [aria-current] / [aria-pressed]，压根匹配不上 ——
- * 属性在、样式死，测试全绿，用户看到的却是零高亮。
- * 状态类断言必须落到 getComputedStyle 上，不能只看 DOM 属性。
- */
-async function visualDiff(page, onSel, offSel, keys) {
-  return page.evaluate(
-    ({ onSel, offSel, keys }) => {
-      const on = document.querySelector(onSel);
-      const off = document.querySelector(offSel);
-      // 对照项缺失是测试自身的问题，必须报出来，不能当成「无差异」
-      if (!on || !off) return { error: `对照元素缺失 on=${!!on} off=${!!off}` };
-      const read = (el) => {
-        const cs = getComputedStyle(el);
-        return {
-          bg: cs.backgroundColor,
-          color: cs.color,
-          weight: cs.fontWeight,
-          borderLeft: cs.borderLeftColor,
-          borderColor: cs.borderTopColor,
-          boxShadow: cs.boxShadow,
-          outline: cs.outlineWidth + ' ' + cs.outlineColor,
-        };
-      };
-      const a = read(on);
-      const b = read(off);
-      return { diff: keys.filter((k) => a[k] !== b[k]), on: a, off: b };
-    },
-    { onSel, offSel, keys },
-  );
-}
-
 (async () => {
-  const browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  const { browser, page } = await launch({ viewport: { width: 1440, height: 900 } });
   const consoleErrors = [];
   const writes = [];
   page.on('console', (m) => {
@@ -577,6 +522,7 @@ async function visualDiff(page, onSel, offSel, keys) {
   if (consoleErrors.length) consoleErrors.slice(0, 5).forEach((e) => console.log(`       ${e}`));
 
   await browser.close();
+  const { pass, fail, failures } = stats();
   console.log(`\n结果：${pass} 通过 / ${fail} 失败`);
   if (failures.length) console.log(`失败项：${failures.join('、')}`);
   process.exit(fail === 0 ? 0 : 1);
