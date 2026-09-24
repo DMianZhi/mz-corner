@@ -2,7 +2,10 @@
 //
 // 表单用 `key={doc._id}` 强制重挂载来重置内部状态 —— 比在 useEffect 里手动
 // 同步「选中项变了 → 重填表单」更不容易出错（AGENTS.md 也要求少用 effect）。
-import { useState, useSyncExternalStore, useEffect } from 'react';
+//
+// ⚠️ 这个 key 同时是 useDocumentDraft 的正确性前提：values 只在挂载时初始化一次，
+// 少了 key 就会把上一条的值整份写进当前条的草稿。
+import { useState } from 'react';
 import { toast } from 'sonner';
 import {
   createContent,
@@ -11,14 +14,16 @@ import {
   type ContentDocument,
   type ContentField,
 } from '@/services/admin-api';
-import { asText, emptyValues, focusFirstError, SchemaForm, validateValues, type FieldErrors } from './SchemaForm';
+import { asText, emptyValues, SchemaForm } from './SchemaForm';
 import { statusTone, StatusText } from './status';
-import { clearDraft, draftTotal, getDraft, setDraft, subscribeDrafts } from './draftStore';
-import { mapLabelErrorsToFields as mapErrors } from './SchemaForm';
+import { clearDraft, getDraft } from './draftStore';
+import { resolveSelection } from './selection';
+import { SaveDock } from './SaveDock';
+import { useCtrlS } from './useCtrlS';
+import { useDocumentDraft } from './useDocumentDraft';
+import { useSaveAction } from './useSaveAction';
 import {
   Badge,
-  Button,
-  DangerConfirm,
   EmptyState,
   FieldValue,
   Icon,
@@ -36,78 +41,28 @@ function ProjectDetail(props: {
   onDeleted: () => Promise<void>;
   onAuthLost: () => void;
 }) {
-  // 草稿优先：上次没保存就离开的项目，回到这里要能看到改动还在（审计 P0-1）
-  const [values, setValues] = useState<Record<string, unknown>>(() => {
-    const draft = getDraft('projects', props.document._id);
-    if (draft) return draft.values;
-    const initial: Record<string, unknown> = {};
-    for (const field of props.fields) initial[field.name] = props.document[field.name];
-    return initial;
+  const draft = useDocumentDraft({
+    collection: 'projects',
+    document: props.document,
+    fields: props.fields,
   });
-  const [saving, setSaving] = useState(false);
-  const [errors, setErrors] = useState<FieldErrors>({});
-  // draftStore 变化时重渲（dirty 由此推导，RailItem 的草稿点也靠它）
-  useSyncExternalStore(subscribeDrafts, draftTotal);
 
-  const dirty = getDraft('projects', props.document._id) !== null;
-
-  // 副作用留在 updater 之外：updater 在渲染期执行，里面写草稿会同步通知订阅方改状态
-  const update = (name: string, value: unknown) => {
-    const next = { ...values, [name]: value };
-    setValues(next);
-    setDraft('projects', props.document._id, next);
-    if (name in errors) {
-      const cleared: FieldErrors = { ...errors };
-      delete cleared[name];
-      setErrors(cleared);
-    }
-  };
-
-  const save = async () => {
-    const clientErrors = validateValues(props.fields, values);
-    if (Object.keys(clientErrors).length > 0) {
-      setErrors(clientErrors);
-      focusFirstError(props.fields, clientErrors);
-      toast.error(`保存失败，有 ${Object.keys(clientErrors).length} 处需要修正`);
-      return;
-    }
-    setSaving(true);
-    try {
-      await updateContent('projects', props.document._id, values);
+  const { saving, run: save } = useSaveAction({
+    fields: props.fields,
+    values: draft.values,
+    setErrors: draft.setErrors,
+    onAuthLost: props.onAuthLost,
+    save: async () => {
+      await updateContent('projects', props.document._id, draft.values);
       clearDraft('projects', props.document._id);
-      setErrors({});
-      toast.success('已保存');
-      await props.onSaved();
-    } catch (error) {
-      if (error instanceof Error && error.name === 'Unauthorized') {
-        props.onAuthLost();
-        return;
-      }
-      const message = error instanceof Error ? error.message : '保存失败';
-      const fieldErrors = mapErrors(props.fields, message);
-      if (fieldErrors) {
-        setErrors(fieldErrors);
-        focusFirstError(props.fields, fieldErrors);
-        toast.error(`保存失败，有 ${Object.keys(fieldErrors).length} 处需要修正`);
-      } else {
-        toast.error(message, { action: { label: '重试', onClick: () => void save() } });
-      }
-    } finally {
-      setSaving(false);
-    }
-  };
+    },
+    successMessage: '已保存',
+    onSuccess: props.onSaved,
+  });
 
   // Ctrl/Cmd+S：与文章编辑器一致，四个面板都能手不离键盘保存（审计 P4）
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
-        event.preventDefault();
-        if (!saving) void save();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  });
+  useCtrlS({ onSave: () => void save(), disabled: saving });
+
   const remove = async () => {
     try {
       await deleteContent('projects', props.document._id);
@@ -122,17 +77,17 @@ function ProjectDetail(props: {
     }
   };
 
-  const color = asText(values.color) || 'var(--brand)';
+  const color = asText(draft.values.color) || 'var(--brand)';
 
   return (
     <div className="adm-detail">
       <Kicker num="06" label="PROJECTS" />
 
       <TextInput
-        value={asText(values.name)}
+        value={asText(draft.values.name)}
         big
         placeholder="项目名称"
-        onChange={(next) => update('name', next)}
+        onChange={(next) => draft.update('name', next)}
       />
 
       <div className="adm-dmeta">
@@ -145,22 +100,22 @@ function ProjectDetail(props: {
             display: 'inline-block',
           }}
         />
-        <span>{asText(values.tagline) || '未填简介'}</span>
-        <span>排序 {asText(values.order) || '0'}</span>
-        <StatusText value={asText(values.status)} />
+        <span>{asText(draft.values.tagline) || '未填简介'}</span>
+        <span>排序 {asText(draft.values.order) || '0'}</span>
+        <StatusText value={asText(draft.values.status)} />
       </div>
 
       <div className="adm-sec">
         <span className="label-site">字段</span>
         <hr className="adm-divider" style={{ flex: 1 }} />
-        {dirty ? <Badge tone="brand">未保存</Badge> : null}
+        {draft.dirty ? <Badge tone="brand">未保存</Badge> : null}
       </div>
 
       <SchemaForm
         fields={props.fields}
-        values={values}
-        onChange={update}
-        errors={errors}
+        values={draft.values}
+        onChange={draft.update}
+        errors={draft.errors}
         exclude={['name']}
       />
 
@@ -170,26 +125,7 @@ function ProjectDetail(props: {
         </span>
       </FieldValue>
 
-      <div className="adm-dock">
-        <span
-          className="label-site"
-          style={{ padding: '0 8px', minWidth: 62, textAlign: 'center' }}
-        >
-          {dirty ? '有改动' : '已同步'}
-        </span>
-        <Button
-          variant="primary"
-          size="sm"
-          icon={<Icon.Save size={14} />}
-          loading={saving}
-          disabled={!dirty}
-          onClick={save}
-        >
-          保存
-        </Button>
-        <span className="adm-dock-sep" />
-        <DangerConfirm size="sm" label="删除" confirmLabel="确认删除" onConfirm={remove} />
-      </div>
+      <SaveDock dirty={draft.dirty} saving={saving} onSave={save} onDelete={remove} />
     </div>
   );
 }
@@ -204,7 +140,7 @@ export function ProjectsPanel(props: {
   const [creating, setCreating] = useState(false);
 
   // 未选中时默认落到第一条：切标签后右栏不该是一片空白（demo B 的行为）
-  const selected = props.documents.find((doc) => doc._id === selectedId) ?? props.documents[0] ?? null;
+  const selected = resolveSelection(props.documents, selectedId);
 
   const create = async () => {
     setCreating(true);
