@@ -31,7 +31,7 @@ import {
   type FieldErrors,
 } from './SchemaForm';
 import { StatusText } from './status';
-import { draftStore } from './draftStore';
+import { clearDraft, getDraft, setDraft } from './draftStore';
 import {
   Badge,
   Button,
@@ -78,7 +78,7 @@ export function ArticleEditor(props: {
 
   // 初始化顺序：草稿 > 文档当前值。草稿存在说明上次编辑没保存就离开了，恢复它。
   const [values, setValues] = useState<Record<string, unknown>>(() => {
-    const draft = draftStore.get('articles', draftKey);
+    const draft = getDraft('articles', draftKey);
     if (draft) return draft.values;
     return pickValues(props.fields, props.article);
   });
@@ -88,7 +88,7 @@ export function ArticleEditor(props: {
 
   // 草稿这层「真相」独立于 React 状态：面板卸载（切标签）后依然在。
   // dirty 用「草稿是否存在」推导 —— set/clear 都会触发 draftStore 通知，订阅方自动重渲。
-  const dirty = props.isNew ? true : draftStore.get('articles', draftKey) !== null;
+  const dirty = props.isNew ? true : getDraft('articles', draftKey) !== null;
 
   // 每次编辑都写草稿。注意 isNew 的虚拟文档也存草稿（key=articles:local:xxx），
   // 保存成功后由父级 removePending + clearDraft 一并清掉。
@@ -104,7 +104,7 @@ export function ArticleEditor(props: {
       delete cleared[name];
       setErrors(cleared);
     }
-    draftStore.set('articles', draftKey, next);
+    setDraft('articles', draftKey, next);
   };
 
   const save = async () => {
@@ -123,7 +123,7 @@ export function ArticleEditor(props: {
         await props.onSaveNew(values);
       } else {
         await updateContent('articles', draftKey, values);
-        draftStore.clear('articles', draftKey);
+        clearDraft('articles', draftKey);
         await props.onSaved();
       }
       setErrors({});

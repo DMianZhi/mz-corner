@@ -16,19 +16,29 @@ const PENDING_KEY = 'mz-admin-pending';
 
 type DraftMap = Record<string, { values: Record<string, unknown>; savedAt: number }>;
 
+// 内存镜像：sessionStorage 不可写时（Safari 无痕 / 配额满）草稿仍能活过切标签。
+//
+// 之前这里**没有**内存层，文件头却声称有 —— 于是降级环境下草稿被静默丢弃，
+// 而注释说它没丢（用只读 sessionStorage 探针实测：setDraft 之后 getDraft 返回 null）。
+// 现在让行为与注释一致：内存是主副本，sessionStorage 是持久化镜像。
+let memoryMap: DraftMap | null = null;
+
 function readMap(): DraftMap {
+  if (memoryMap) return memoryMap;
   try {
-    return JSON.parse(sessionStorage.getItem(DRAFT_KEY) ?? '{}') as DraftMap;
+    memoryMap = JSON.parse(sessionStorage.getItem(DRAFT_KEY) ?? '{}') as DraftMap;
   } catch {
-    return {};
+    memoryMap = {};
   }
+  return memoryMap;
 }
 
 function writeMap(map: DraftMap): void {
+  memoryMap = map;
   try {
     sessionStorage.setItem(DRAFT_KEY, JSON.stringify(map));
   } catch {
-    // sessionStorage 满 / 隐私模式：内存单例仍在，只是掉不到刷新之后
+    // sessionStorage 满 / 隐私模式：内存镜像已更新，只是掉不到刷新之后
   }
 }
 
@@ -81,15 +91,21 @@ function totalPendingCount(): number {
 
 type PendingDoc = { collection: string; doc: Record<string, unknown> & { _id: string } };
 
+// 与草稿同一套降级策略：内存镜像 + sessionStorage 持久化
+let memoryPending: PendingDoc[] | null = null;
+
 function readPending(): PendingDoc[] {
+  if (memoryPending) return memoryPending;
   try {
-    return JSON.parse(sessionStorage.getItem(PENDING_KEY) ?? '[]') as PendingDoc[];
+    memoryPending = JSON.parse(sessionStorage.getItem(PENDING_KEY) ?? '[]') as PendingDoc[];
   } catch {
-    return [];
+    memoryPending = [];
   }
+  return memoryPending;
 }
 
 function writePending(list: PendingDoc[]): void {
+  memoryPending = list;
   try {
     sessionStorage.setItem(PENDING_KEY, JSON.stringify(list));
   } catch {
@@ -123,6 +139,3 @@ export function isLocalId(docId: string): boolean {
 export function newLocalId(): string {
   return `local:${typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Date.now())}`;
 }
-
-/** 兼容别名：防止误用命名空间式调用（真正 API 是 getDraft/setDraft/clearDraft） */
-export const draftStore = { get: getDraft, set: setDraft, clear: clearDraft };
