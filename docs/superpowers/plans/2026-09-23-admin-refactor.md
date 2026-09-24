@@ -383,21 +383,24 @@ describe('draftStore 草稿层', () => {
     expect(getDraft('projects', 'a1')?.values).toEqual({ name: 'P' });
   });
 
-  it('草稿总数 = 草稿数 + 本地新建数', () => {
+  it('draftTotal 只数草稿，不含本地新建', () => {
     expect(draftTotal()).toBe(0);
     setDraft('articles', 'a1', { title: 'x' });
     expect(draftTotal()).toBe(1);
     addPending('articles', { _id: 'local:1', title: '新' });
-    expect(draftTotal()).toBe(2);
+    // draftTotal() = Object.keys(readMap()).length，pending 不在其中
+    expect(draftTotal()).toBe(1);
   });
 
-  it('订阅：变更触发通知，回调收到最新计数', () => {
+  it('订阅回调收到的是「草稿 + 本地新建」的总数', () => {
     const seen: number[] = [];
     const off = subscribeDrafts((count) => seen.push(count));
-    // 订阅时会立即回调一次当前值
     expect(seen).toEqual([0]);
     setDraft('articles', 'a1', { title: 'x' });
     expect(seen).toEqual([0, 1]);
+    // 订阅计数含 pending（notify 里是 draftTotal() + totalPendingCount()）
+    addPending('articles', { _id: 'local:1', title: '新' });
+    expect(seen).toEqual([0, 1, 2]);
     off();
   });
 
