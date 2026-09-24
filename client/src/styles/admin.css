@@ -88,7 +88,7 @@ html.light .adm-shell {
 .adm-brand-mark {
   width: 24px;
   height: 24px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   display: grid;
   place-items: center;
   background: var(--brand);
@@ -190,7 +190,7 @@ html.light .adm-shell {
   justify-content: center;
   gap: var(--adm-gap-icon);
   padding: 9px 14px;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-soft);
   background: var(--bg-raised);
   color: var(--text-1);
@@ -219,10 +219,12 @@ html.light .adm-shell {
   cursor: not-allowed;
 }
 
-/* 主按钮改用「等宽小写字 + 胶囊」，与站点 .act 同一语言 */
+/* 主按钮：等宽小写字 + 站内统一圆角。
+   原先是 999px 胶囊 —— 但前台只在标签/chip 上用胶囊、按钮没有，
+   且它造成「编辑(9px) 与 保存(胶囊) 并排」的割裂，故统一到 --radius-md。
+   几何交给 size，本变体只改配色/字体。 */
 .adm-btn--primary {
-  padding: 8px 15px;
-  border-radius: 999px;
+  border-radius: var(--radius-md);
   border-color: transparent;
   background: var(--brand);
   color: var(--brand-ink);
@@ -257,11 +259,10 @@ html.light .adm-shell {
 .adm-btn--sm {
   padding: 6px 11px;
   font-size: 12.5px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
 }
 .adm-btn--sm.adm-btn--primary {
-  padding: 7px 13px;
-  border-radius: 999px;
+  border-radius: var(--radius-md);
   font-size: 11.5px;
 }
 .adm-btn--icon {
@@ -295,7 +296,7 @@ html.light .adm-shell {
   width: 100%;
   box-sizing: border-box;
   padding: 10px 12px;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   background: var(--bg-raised);
   border: 1px solid var(--border);
   color: var(--text-1);
@@ -339,7 +340,7 @@ html.light .adm-shell {
   height: 30px;
   padding: 0;
   border: none;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--text-3);
   cursor: pointer;
@@ -420,7 +421,7 @@ html.light .adm-shell {
   gap: var(--adm-gap-icon);
   padding: 7px 9px;
   min-height: 40px;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   background: var(--bg-raised);
   border: 1px solid var(--border);
   transition:
@@ -451,7 +452,7 @@ html.light .adm-shell {
   align-items: center;
   gap: 4px;
   padding: 3px 4px 3px 8px;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
   background: var(--bg-hover);
   color: var(--text-2);
   font: 500 12px/1.5 var(--font-mono);
@@ -485,7 +486,7 @@ html.light .adm-shell {
   /* -5px：热区 26×26（审计要求 24–28）—— 取 26 而不是 24，
      是因为热区恰好等于 chip 内边距时，边界那一像素仍会落到 chip 上 */
   inset: -5px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
 }
 
 /* ── 徽标 / 卡片 ──────────────────────────────────────── */
@@ -495,7 +496,7 @@ html.light .adm-shell {
   align-items: center;
   gap: 5px;
   padding: 3px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--bg-hover);
   color: var(--text-2);
   font: 500 11px/1.4 var(--font-mono);
@@ -759,7 +760,7 @@ html.light .adm-shell {
   gap: var(--adm-gap-icon);
   padding: 7px 12px;
   border: 0;
-  border-radius: 9px;
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-2);
   font: 500 12.5px/1 var(--font-sans);
@@ -873,7 +874,7 @@ html.light .adm-shell {
   place-items: center;
   width: 44px;
   height: 44px;
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
   background: var(--bg-raised);
   border: 1px solid var(--border-soft);
   color: var(--text-3);
