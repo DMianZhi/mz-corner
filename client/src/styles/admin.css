@@ -12,6 +12,25 @@
  * 与站点前台互不干扰；global.css 是设计系统本身，不该混入后台业务样式。
  */
 
+/* ── 局部令牌 ───────────────────────────────────────────
+   圆角引用站点令牌（--radius-sm/md/lg，与前台同源）；
+   这里只补 admin 自己重复出现、站点令牌里没有的量。
+
+   --dock-* 原先就地定义在 .adm-dock 上，本段把它们上移到 :root：
+   取值与行为完全不变，只是让「工具条几何」和「节奏」放在一起可查。 */
+:root {
+  /* 浮动工具条几何 */
+  --dock-r: 14px;      /* 工具条容器圆角 */
+  --dock-pad: 5px;     /* 工具条内边距（子元素圆角 = 容器圆角 − 它） */
+  --dock-btn-r: calc(var(--dock-r) - var(--dock-pad));  /* 同心圆角 */
+  --dock-btn-h: 30px;  /* 工具条内按钮统一高度 */
+
+  /* 节奏：只收敛「同一取值已在 3 处以上重复」的间距，语义不同的不合并。
+     不做全量间距重排 —— 那是视觉重设计，不是令牌化。 */
+  --adm-gap: 10px;      /* 常规间距：索引行、区段标题、空态堆叠 */
+  --adm-gap-icon: 6px;  /* 图标/文字紧邻：按钮内、chip 内、工具条按钮内 */
+}
+
 /* ── 外壳 ─────────────────────────────────────────────── */
 
 /* 让原生控件（下拉列表、滚动条、日期选择器）跟随主题 */
@@ -169,7 +188,7 @@ html.light .adm-shell {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: var(--adm-gap-icon);
   padding: 9px 14px;
   border-radius: 9px;
   border: 1px solid var(--border-soft);
@@ -398,7 +417,7 @@ html.light .adm-shell {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: var(--adm-gap-icon);
   padding: 7px 9px;
   min-height: 40px;
   border-radius: 9px;
@@ -530,7 +549,7 @@ html.light .adm-shell {
   flex-shrink: 0;
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: var(--adm-gap);
   padding: 17px 20px 11px;
   border-bottom: 1px solid var(--border-soft);
 }
@@ -558,7 +577,7 @@ html.light .adm-shell {
 .adm-ritem {
   display: grid;
   grid-template-columns: 26px minmax(0, 1fr) 8px;
-  gap: 10px;
+  gap: var(--adm-gap);
   align-items: center;
   width: 100%;
   padding: 10px 18px;
@@ -698,7 +717,7 @@ html.light .adm-shell {
 .adm-sec {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--adm-gap);
   margin: 26px 0 4px;
 }
 .adm-sec-note {
@@ -710,14 +729,8 @@ html.light .adm-shell {
 /* ── 浮动工具条（编辑 / 分屏 / 预览 / 保存）────────────── */
 
 .adm-dock {
-  /* dock 内按钮的统一圆角与高度。
-     圆角取「同心值」：子元素圆角 = 容器圆角 − 内边距（14 − 5 = 9）。
-     这样内外两层圆角视觉同心，不会出现"内层比外框更方"的错位；
-     写成 calc 是为了容器圆角/内边距若调整，子元素自动跟随。 */
-  --dock-r: 14px;
-  --dock-pad: 5px;
-  --dock-btn-r: calc(var(--dock-r) - var(--dock-pad));
-  --dock-btn-h: 30px;
+  /* 圆角 / 内边距 / 按钮高度已上移到文件顶部「局部令牌」段的 :root，
+     那边补齐了同心圆角的推导说明。 */
   position: fixed;
   /* 对齐右栏中心而不是视口中心：左栏 320px 常驻，按 50% 居中会整体偏左 160px */
   left: calc(50% + var(--rail-w, 0px) / 2);
@@ -743,7 +756,7 @@ html.light .adm-shell {
 .adm-dock-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--adm-gap-icon);
   padding: 7px 12px;
   border: 0;
   border-radius: 9px;
@@ -850,7 +863,7 @@ html.light .adm-shell {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: var(--adm-gap);
   padding: 64px 24px;
   text-align: center;
   color: var(--text-3);
