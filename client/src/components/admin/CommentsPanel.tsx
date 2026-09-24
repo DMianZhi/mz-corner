@@ -5,7 +5,7 @@
 //
 // 索引栏用**正文**而不是昵称做标题：审核时真正要判断的是内容，
 // 昵称与时间放在右侧元信息行里，不占用索引栏那一行宽度。
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import {
   deleteContent,
@@ -13,21 +13,14 @@ import {
   type ContentDocument,
   type ContentField,
 } from '@/services/admin-api';
-import { asText, focusFirstError, SchemaForm, validateValues, type FieldErrors } from './SchemaForm';
-import { clearDraft, getDraft, setDraft, subscribeDrafts } from './draftStore';
-import { mapLabelErrorsToFields as mapErrors } from './SchemaForm';
-import {
-  Badge,
-  Button,
-  DangerConfirm,
-  EmptyState,
-  FieldValue,
-  Icon,
-  Kicker,
-  Rail,
-  RailItem,
-  TextInput,
-} from './ui';
+import { asText, SchemaForm } from './SchemaForm';
+import { clearDraft, getDraft } from './draftStore';
+import { resolveSelection } from './selection';
+import { SaveDock } from './SaveDock';
+import { useCtrlS } from './useCtrlS';
+import { useDocumentDraft } from './useDocumentDraft';
+import { useSaveAction } from './useSaveAction';
+import { Badge, EmptyState, FieldValue, Icon, Kicker, Rail, RailItem, TextInput } from './ui';
 
 function CommentDetail(props: {
   document: ContentDocument;
@@ -38,81 +31,28 @@ function CommentDetail(props: {
   onDeleted: () => Promise<void>;
   onAuthLost: () => void;
 }) {
-  const [values, setValues] = useState<Record<string, unknown>>(() => {
-    // 草稿优先（P0-1）：上次没保存就离开时，恢复它而不是静默显示已保存值
-    const draft = getDraft('comments', props.document._id);
-    const base: Record<string, unknown> = {};
-    for (const field of props.fields) base[field.name] = props.document[field.name];
-    return draft ? draft.values : base;
+  const draft = useDocumentDraft({
+    collection: 'comments',
+    document: props.document,
+    fields: props.fields,
   });
-  const [saving, setSaving] = useState(false);
-  const [errors, setErrors] = useState<FieldErrors>({});
-  // draftStore 变化时重渲（dirty 由此推导，RailItem 的草稿点也靠它）
-  const [, forceRender] = useState(0);
-  useEffect(() => subscribeDrafts(() => forceRender((n) => n + 1)), []);
 
-
-  // dirty 从草稿推导（订阅在上面）；本地保存后 clearDraft 自动复位
-  const dirty = getDraft('comments', props.document._id) !== null;
-
-  // 副作用留在 updater 之外：updater 在 React 渲染期执行，里面写草稿会同步通知订阅方改状态
-  const update = (name: string, value: unknown) => {
-    const next = { ...values, [name]: value };
-    setValues(next);
-    setDraft('comments', props.document._id, next);
-    if (name in errors) {
-      const cleared: FieldErrors = { ...errors };
-      delete cleared[name];
-      setErrors(cleared);
-    }
-  };
-
-  const save = async () => {
-    // 客户端先行校验；服务端错误按 label 映射到字段（P2-4）
-    const clientErrors = validateValues(props.fields, values);
-    if (Object.keys(clientErrors).length > 0) {
-      setErrors(clientErrors);
-      focusFirstError(props.fields, clientErrors);
-      toast.error(`保存失败，有 ${Object.keys(clientErrors).length} 处需要修正`);
-      return;
-    }
-    setSaving(true);
-    try {
-      await updateContent('comments', props.document._id, values);
+  const { saving, run: save } = useSaveAction({
+    fields: props.fields,
+    values: draft.values,
+    setErrors: draft.setErrors,
+    onAuthLost: props.onAuthLost,
+    save: async () => {
+      await updateContent('comments', props.document._id, draft.values);
       clearDraft('comments', props.document._id);
-      setErrors({});
-      toast.success('已保存');
-      await props.onSaved();
-    } catch (error) {
-      if (error instanceof Error && error.name === 'Unauthorized') {
-        props.onAuthLost();
-        return;
-      }
-      const message = error instanceof Error ? error.message : '保存失败';
-      const labelErrors = mapErrors(props.fields, message);
-      if (labelErrors) {
-        setErrors(labelErrors);
-        focusFirstError(props.fields, labelErrors);
-        toast.error(`保存失败，有 ${Object.keys(labelErrors).length} 处需要修正`);
-      } else {
-        toast.error(message, { action: { label: '重试', onClick: () => void save() } });
-      }
-    } finally {
-      setSaving(false);
-    }
-  };
+    },
+    successMessage: '已保存',
+    onSuccess: props.onSaved,
+  });
 
   // Ctrl/Cmd+S：与文章编辑器一致，四个面板都能手不离键盘保存（审计 P4）
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
-        event.preventDefault();
-        if (!saving) void save();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  });
+  useCtrlS({ onSave: () => void save(), disabled: saving });
+
   const remove = async () => {
     try {
       await deleteContent('comments', props.document._id);
@@ -134,14 +74,14 @@ function CommentDetail(props: {
       <Kicker num="06" label="COMMENTS" />
 
       <TextInput
-        value={asText(values.author)}
+        value={asText(draft.values.author)}
         big
         placeholder="昵称"
-        onChange={(next) => update('author', next)}
+        onChange={(next) => draft.update('author', next)}
       />
 
       <div className="adm-dmeta">
-        <span>{asText(values.createTime) || '未记录时间'}</span>
+        <span>{asText(draft.values.createTime) || '未记录时间'}</span>
         <span>
           来自{' '}
           {props.articleTitle ? (
@@ -162,7 +102,7 @@ function CommentDetail(props: {
       <div className="adm-sec">
         <span className="label-site">字段</span>
         <hr className="adm-divider" style={{ flex: 1 }} />
-        {dirty ? <Badge tone="brand">未保存</Badge> : null}
+        {draft.dirty ? <Badge tone="brand">未保存</Badge> : null}
       </div>
 
       {/* 关联文章不给编辑框：手填外键极易造出悬空评论，
@@ -170,9 +110,9 @@ function CommentDetail(props: {
           要改关联，正确做法是删掉重发（评论本来也来自读者）。 */}
       <SchemaForm
         fields={props.fields}
-        values={values}
-        errors={errors}
-        onChange={update}
+        values={draft.values}
+        errors={draft.errors}
+        onChange={draft.update}
         exclude={['author', 'articleId']}
       />
 
@@ -182,26 +122,7 @@ function CommentDetail(props: {
         </span>
       </FieldValue>
 
-      <div className="adm-dock">
-        <span
-          className="label-site"
-          style={{ padding: '0 8px', minWidth: 62, textAlign: 'center' }}
-        >
-          {dirty ? '有改动' : '已同步'}
-        </span>
-        <Button
-          variant="primary"
-          size="sm"
-          icon={<Icon.Save size={14} />}
-          loading={saving}
-          disabled={!dirty}
-          onClick={save}
-        >
-          保存
-        </Button>
-        <span className="adm-dock-sep" />
-        <DangerConfirm size="sm" label="删除" confirmLabel="确认删除" onConfirm={remove} />
-      </div>
+      <SaveDock dirty={draft.dirty} saving={saving} onSave={save} onDelete={remove} />
     </div>
   );
 }
@@ -221,7 +142,7 @@ export function CommentsPanel(props: {
     asText(b.createTime).localeCompare(asText(a.createTime)),
   );
   // 未选中时默认落到第一条：切标签后右栏不该是一片空白（demo B 的行为）
-  const selected = ordered.find((doc) => doc._id === selectedId) ?? ordered[0] ?? null;
+  const selected = resolveSelection(ordered, selectedId);
 
   return (
     <div className="adm-workbench">
