@@ -79,8 +79,12 @@ export default function ArticlesPage() {
 
         {/* 标签过滤：加载中显示胶囊骨架，避免数据到达后突然撑开。
             64 个标签全部平铺会占 8 行 296px，把文章列表本身挤出首屏，
-            故默认只留热门标签（实测 11/64），长尾收进虚线胶囊按需展开。 */}
-        <div className="mt-8 flex flex-wrap gap-2" style={{ minHeight: 30 }}>
+            故默认只留热门标签（实测 11/64），长尾收进虚线胶囊按需展开。
+
+            minHeight 预约「折叠后 2 行」的高度（胶囊 30px + 行距 8px）：
+            骨架只占 1 行、真标签占 2 行，不预约会让下方文章列表在加载完成瞬间
+            整体下移 38px（实测 CLS）。这里按最终高度锁住，不依赖占位宽度猜得准。 */}
+        <div className="mt-8 flex flex-wrap gap-2" style={{ minHeight: 68 }}>
           {tagsLoading ? (
             <TagFilterSkeleton />
           ) : (
